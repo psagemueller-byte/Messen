@@ -109,6 +109,44 @@
         }
         .counter-section.visible { display: block; }
 
+        .takt-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .takt-row label { font-weight: 600; font-size: 1rem; }
+        .takt-input {
+            width: 100px;
+            padding: 10px 12px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            font-size: 1.1rem;
+            text-align: center;
+            font-weight: 600;
+        }
+        .takt-input:focus { border-color: var(--primary); outline: none; }
+        .takt-unit { font-size: 0.95rem; color: #666; }
+
+        .auto-btn {
+            padding: 12px 28px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .auto-btn.start { background: var(--success); color: white; }
+        .auto-btn.start:hover { opacity: 0.9; }
+        .auto-btn.stop { background: var(--danger); color: white; animation: pulse-btn 1s infinite; }
+        @keyframes pulse-btn {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
         .part-counter {
             display: flex;
             align-items: center;
@@ -121,6 +159,21 @@
             font-weight: 700;
             min-width: 150px;
             color: var(--primary);
+            cursor: pointer;
+            border-bottom: 3px dashed transparent;
+            transition: border-color 0.2s;
+        }
+        .part-counter .count:hover { border-bottom-color: var(--primary); }
+        .count-edit-input {
+            font-size: 4rem;
+            font-weight: 700;
+            width: 180px;
+            text-align: center;
+            color: var(--primary);
+            border: 3px solid var(--primary);
+            border-radius: 8px;
+            outline: none;
+            background: #e8f0fe;
         }
         .counter-btn {
             width: 80px;
@@ -393,11 +446,29 @@
         <!-- Counter Section -->
         <div class="counter-section" id="counterSection">
             <h2>Teilezähler</h2>
+
+            <!-- Taktzeit -->
+            <div class="takt-row">
+                <label for="taktInput">Taktzeit:</label>
+                <input type="number" id="taktInput" class="takt-input" min="1" max="9999" value="30" step="1">
+                <span class="takt-unit">Sekunden / Teil</span>
+                <button class="auto-btn start" id="autoBtn" onclick="toggleAutoCount()">Auto-Start</button>
+            </div>
+
+            <!-- Progress bar for current takt -->
+            <div id="taktProgress" style="display:none; margin-bottom:16px;">
+                <div style="background:#e0e0e0; border-radius:8px; height:8px; overflow:hidden;">
+                    <div id="taktBar" style="background:var(--primary); height:100%; width:0%; transition: width 0.3s linear;"></div>
+                </div>
+                <div id="taktCountdown" style="font-size:0.9rem; color:#666; margin-top:4px;"></div>
+            </div>
+
             <div class="part-counter">
                 <button class="counter-btn minus" onclick="changeCount(-1)">-</button>
-                <div class="count" id="partCount">0</div>
+                <div class="count" id="partCount" onclick="editPartCount()">0</div>
                 <button class="counter-btn plus" onclick="changeCount(1)">+</button>
             </div>
+            <p style="font-size:0.85rem; color:#999; margin-bottom:12px;">Zahl anklicken zum direkten Eingeben</p>
             <button class="counter-btn reset-btn" onclick="resetCount()">Zurücksetzen</button>
 
             <div class="sound-toggle">
@@ -439,6 +510,9 @@
         let kapaFilter = "";
         let headerInfo = {};
         let tableVisible = false;
+        let autoInterval = null;
+        let taktStartTime = null;
+        let taktProgressInterval = null;
 
         // --- Audio ---
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -648,10 +722,99 @@
 
         function resetCount() {
             if (confirm("Teilezähler wirklich zurücksetzen?")) {
+                stopAutoCount();
                 partCount = 0;
                 document.getElementById("partCount").textContent = "0";
                 updateMeasurements();
             }
+        }
+
+        function editPartCount() {
+            const el = document.getElementById("partCount");
+            const current = partCount;
+            const input = document.createElement("input");
+            input.type = "number";
+            input.className = "count-edit-input";
+            input.value = current;
+            input.min = 0;
+            el.replaceWith(input);
+            input.focus();
+            input.select();
+
+            function finish() {
+                const val = parseInt(input.value);
+                const newEl = document.createElement("div");
+                newEl.className = "count";
+                newEl.id = "partCount";
+                newEl.onclick = editPartCount;
+                if (!isNaN(val) && val >= 0) {
+                    partCount = val;
+                }
+                newEl.textContent = partCount;
+                input.replaceWith(newEl);
+                updateMeasurements();
+            }
+
+            input.addEventListener("blur", finish);
+            input.addEventListener("keydown", (e) => {
+                if (e.key === "Enter") { e.preventDefault(); input.blur(); }
+                if (e.key === "Escape") { input.value = current; input.blur(); }
+            });
+        }
+
+        // --- Auto Count (Taktzeit) ---
+        function toggleAutoCount() {
+            if (autoInterval) {
+                stopAutoCount();
+            } else {
+                startAutoCount();
+            }
+        }
+
+        function startAutoCount() {
+            const taktSec = parseInt(document.getElementById("taktInput").value);
+            if (isNaN(taktSec) || taktSec < 1) {
+                alert("Bitte gültige Taktzeit eingeben (mind. 1 Sekunde).");
+                return;
+            }
+            const btn = document.getElementById("autoBtn");
+            btn.textContent = "Stop";
+            btn.className = "auto-btn stop";
+            document.getElementById("taktInput").disabled = true;
+            document.getElementById("taktProgress").style.display = "block";
+
+            taktStartTime = Date.now();
+
+            autoInterval = setInterval(() => {
+                changeCount(1);
+                taktStartTime = Date.now();
+            }, taktSec * 1000);
+
+            // Progress bar update
+            taktProgressInterval = setInterval(() => {
+                const elapsed = (Date.now() - taktStartTime) / 1000;
+                const pct = Math.min(100, (elapsed / taktSec) * 100);
+                document.getElementById("taktBar").style.width = pct + "%";
+                const remaining = Math.max(0, Math.ceil(taktSec - elapsed));
+                document.getElementById("taktCountdown").textContent =
+                    `Nächstes Teil in ${remaining}s`;
+            }, 250);
+        }
+
+        function stopAutoCount() {
+            if (autoInterval) {
+                clearInterval(autoInterval);
+                autoInterval = null;
+            }
+            if (taktProgressInterval) {
+                clearInterval(taktProgressInterval);
+                taktProgressInterval = null;
+            }
+            const btn = document.getElementById("autoBtn");
+            btn.textContent = "Auto-Start";
+            btn.className = "auto-btn start";
+            document.getElementById("taktInput").disabled = false;
+            document.getElementById("taktProgress").style.display = "none";
         }
 
         // --- Measurement Logic ---
