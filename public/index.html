@@ -97,6 +97,49 @@
             border-color: var(--primary);
         }
 
+        /* Filter section (prominent) */
+        .filter-section {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 20px 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            display: none;
+        }
+        .filter-section.visible { display: block; }
+        .filter-section h2 { font-size: 1.1rem; margin-bottom: 12px; }
+        .filter-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .filter-btn {
+            padding: 12px 24px;
+            border: 3px solid var(--border);
+            border-radius: 10px;
+            background: white;
+            cursor: pointer;
+            font-size: 1.1rem;
+            font-weight: 700;
+            transition: all 0.2s;
+        }
+        .filter-btn:hover { border-color: var(--primary); background: #e8f0fe; }
+        .filter-btn.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+        .filter-btn .btn-count {
+            font-size: 0.8rem;
+            font-weight: 400;
+            opacity: 0.8;
+        }
+        .filter-info-text {
+            margin-top: 10px;
+            font-size: 0.9rem;
+            color: #666;
+        }
+
         /* Counter section */
         .counter-section {
             background: var(--card);
@@ -288,12 +331,15 @@
             border-radius: 4px;
             background: #e8f0fe;
         }
-        .measurement-card .messmittel {
+        .measurement-card .messmittel-highlight {
+            display: inline-block;
+            margin-top: 6px;
+            padding: 6px 14px;
+            background: var(--primary);
+            color: white;
+            border-radius: 6px;
             font-size: 1.1rem;
-            margin-top: 4px;
-        }
-        .measurement-card .messmittel strong {
-            color: var(--primary);
+            font-weight: 700;
         }
         .measurement-card .meta {
             font-size: 0.85rem;
@@ -441,6 +487,13 @@
                 <div id="kapaButtons"></div>
             </div>
             <div id="filterInfo" style="display:none; margin-top:8px; font-size:0.9rem; color:#666;"></div>
+        </div>
+
+        <!-- Abteilungs-Filter (eigene prominente Sektion) -->
+        <div class="filter-section" id="filterSection">
+            <h2>Abteilung wählen</h2>
+            <div class="filter-buttons" id="filterButtons"></div>
+            <div id="filterInfo2" class="filter-info-text"></div>
         </div>
 
         <!-- Counter Section -->
@@ -624,16 +677,24 @@
             const kapas = new Set(allPositions.map(p => p.kapa_kuerzel).filter(Boolean));
             const filterRow = document.getElementById("filterRow");
             const kapaButtonsContainer = document.getElementById("kapaButtons");
+            // Hide old inline filter
+            filterRow.style.display = "none";
+
+            // Build prominent filter section
+            const filterSection = document.getElementById("filterSection");
+            const filterButtonsContainer = document.getElementById("filterButtons");
             if (kapas.size > 0) {
-                filterRow.style.display = "flex";
-                let btns = `<button class="kapa-btn active" data-kapa="" onclick="setKapaFilter(this, '')">Alle (${allPositions.length})</button>`;
+                filterSection.classList.add("visible");
+                const kapaNames = { "D": "Drehen", "F": "Fräsen", "S": "Schleifen", "DF": "Drehen/Fräsen", "M": "Montage", "E": "Erodieren" };
+                let btns = `<button class="filter-btn active" onclick="setKapaFilter2(this, '')">Alle <span class="btn-count">(${allPositions.length})</span></button>`;
                 for (const k of [...kapas].sort()) {
                     const count = allPositions.filter(p => p.kapa_kuerzel === k).length;
-                    btns += `<button class="kapa-btn" data-kapa="${k}" onclick="setKapaFilter(this, '${k}')">${k} (${count})</button>`;
+                    const name = kapaNames[k] || k;
+                    btns += `<button class="filter-btn" onclick="setKapaFilter2(this, '${k}')">${k} – ${name} <span class="btn-count">(${count})</span></button>`;
                 }
-                kapaButtonsContainer.innerHTML = btns;
+                filterButtonsContainer.innerHTML = btns;
             } else {
-                filterRow.style.display = "none";
+                filterSection.classList.remove("visible");
             }
 
             applyFilter();
@@ -699,18 +760,28 @@
             renderAllPositionsTable();
         }
 
+        function setKapaFilter2(btn, kapa) {
+            kapaFilter = kapa;
+            document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            applyFilter();
+            updateMeasurements();
+            renderAllPositionsTable();
+        }
+
         function applyFilter() {
             if (kapaFilter) {
                 filteredPositions = allPositions.filter(p => p.kapa_kuerzel === kapaFilter);
             } else {
                 filteredPositions = [...allPositions];
             }
-            // Show filter info with intervals for debugging
-            const filterInfo = document.getElementById("filterInfo");
+            // Show filter info
             const intervals = [...new Set(filteredPositions.map(p => p.pruefintervall))].sort((a, b) => a - b);
-            filterInfo.style.display = "block";
-            filterInfo.textContent = `${filteredPositions.length} Positionen` +
-                (intervals.length > 0 ? ` | Intervalle: ${intervals.map(i => "1/" + i).join(", ")}` : "");
+            const messmittel = [...new Set(filteredPositions.map(p => p.messmittel).filter(Boolean))];
+            const info2 = document.getElementById("filterInfo2");
+            info2.textContent = `${filteredPositions.length} Messpositionen` +
+                (intervals.length > 0 ? ` | Prüfintervalle: ${intervals.map(i => i === 1 ? "jedes Teil" : "1 aus " + i).join(", ")}` : "") +
+                (messmittel.length > 0 ? ` | Messmittel: ${messmittel.join(", ")}` : "");
         }
 
         // --- Counter ---
@@ -869,12 +940,11 @@
                         <div class="details">
                             <div class="merkmal">${pos.pruefmerkmal}</div>
                             <div class="toleranz">
-                                Toleranz: <span>UT ${pos.ut}</span> / <span>OT ${pos.ot}</span>
+                                <span>UT ${pos.ut}</span> / <span>OT ${pos.ot}</span>
                             </div>
-                            <div class="messmittel">Messmittel: <strong>${pos.messmittel}</strong></div>
+                            <div class="messmittel-highlight">${pos.messmittel}</div>
                             <div class="meta">
                                 ${pos.pruefintervall_text} | ${pos.dokumentation}
-                                ${pos.kapa_kuerzel ? " | " + pos.kapa_kuerzel : ""}
                             </div>
                         </div>
                     </div>
