@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mess-Steuerung – Prüfplan</title>
+    <style>
+        :root {
+            --primary: #0066cc;
+            --success: #28a745;
+            --warning: #ff9800;
+            --danger: #dc3545;
+            --bg: #f4f6f9;
+            --card: #ffffff;
+            --text: #333333;
+            --border: #ddd;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        /* Header */
+        .header {
+            background: var(--primary);
+            color: white;
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        .header h1 { font-size: 1.5rem; }
+        .header .info { font-size: 0.9rem; opacity: 0.9; }
+
+        /* Main layout */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Setup panel */
+        .setup-panel {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .setup-panel h2 { margin-bottom: 16px; font-size: 1.2rem; }
+
+        .upload-area {
+            border: 3px dashed var(--border);
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 16px;
+        }
+        .upload-area:hover, .upload-area.dragover {
+            border-color: var(--primary);
+            background: #e8f0fe;
+        }
+        .upload-area .icon { font-size: 3rem; margin-bottom: 12px; }
+        .upload-area p { font-size: 1.1rem; color: #666; }
+
+        /* Filter row */
+        .filter-row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .filter-row label { font-weight: 600; }
+        .kapa-btn {
+            padding: 10px 20px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .kapa-btn:hover { border-color: var(--primary); }
+        .kapa-btn.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        /* Counter section */
+        .counter-section {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            text-align: center;
+            display: none;
+        }
+        .counter-section.visible { display: block; }
+
+        .part-counter {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .part-counter .count {
+            font-size: 4rem;
+            font-weight: 700;
+            min-width: 150px;
+            color: var(--primary);
+        }
+        .counter-btn {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: none;
+            font-size: 2.5rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.1s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .counter-btn:active { transform: scale(0.95); }
+        .counter-btn.plus {
+            background: var(--success);
+            color: white;
+        }
+        .counter-btn.minus {
+            background: var(--danger);
+            color: white;
+        }
+        .counter-btn.reset-btn {
+            width: auto;
+            height: auto;
+            border-radius: 8px;
+            padding: 10px 24px;
+            font-size: 1rem;
+            background: #6c757d;
+            color: white;
+        }
+
+        /* Next measurement indicator */
+        .next-measurement-info {
+            margin-top: 12px;
+            font-size: 0.95rem;
+            color: #666;
+        }
+
+        /* Measurement signal */
+        .signal-area {
+            display: none;
+            margin-bottom: 20px;
+        }
+        .signal-area.visible { display: block; }
+
+        .signal-banner {
+            border-radius: 12px;
+            padding: 30px;
+            text-align: center;
+            animation: pulse 1.5s infinite;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        }
+        .signal-banner.measure {
+            background: var(--warning);
+            color: #333;
+        }
+        .signal-banner.ok {
+            background: var(--success);
+            color: white;
+            animation: none;
+        }
+        .signal-banner h2 { font-size: 2rem; margin-bottom: 8px; }
+        .signal-banner p { font-size: 1.1rem; }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+
+        /* Measurement cards */
+        .measurements-container {
+            display: none;
+        }
+        .measurements-container.visible { display: block; }
+        .measurements-container h3 {
+            margin-bottom: 16px;
+            font-size: 1.2rem;
+        }
+
+        .measurement-card {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            border-left: 6px solid var(--warning);
+            display: grid;
+            grid-template-columns: 80px 1fr;
+            gap: 16px;
+            align-items: center;
+        }
+        .measurement-card .pos-nr {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--primary);
+            text-align: center;
+        }
+        .measurement-card .details { line-height: 1.6; }
+        .measurement-card .merkmal {
+            font-size: 1.3rem;
+            font-weight: 700;
+        }
+        .measurement-card .toleranz {
+            font-size: 1.1rem;
+            color: #555;
+        }
+        .measurement-card .toleranz span {
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 4px;
+            background: #e8f0fe;
+        }
+        .measurement-card .messmittel {
+            font-size: 1.1rem;
+            margin-top: 4px;
+        }
+        .measurement-card .messmittel strong {
+            color: var(--primary);
+        }
+        .measurement-card .meta {
+            font-size: 0.85rem;
+            color: #888;
+            margin-top: 4px;
+        }
+
+        /* All positions table */
+        .all-positions {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 24px;
+            margin-top: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            display: none;
+        }
+        .all-positions.visible { display: block; }
+        .all-positions h3 { margin-bottom: 16px; }
+
+        .toggle-table-btn {
+            background: none;
+            border: 2px solid var(--primary);
+            color: var(--primary);
+            padding: 8px 20px;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            cursor: pointer;
+            margin-bottom: 16px;
+        }
+        .toggle-table-btn:hover {
+            background: var(--primary);
+            color: white;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        th, td {
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            text-align: left;
+        }
+        th {
+            background: var(--primary);
+            color: white;
+            font-weight: 600;
+        }
+        tr:nth-child(even) { background: #f8f9fa; }
+        tr.highlight { background: #fff3cd; }
+
+        /* Audio beep button */
+        .sound-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 12px;
+            justify-content: center;
+        }
+        .sound-toggle label { cursor: pointer; font-size: 0.95rem; }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header h1 { font-size: 1.2rem; }
+            .part-counter .count { font-size: 3rem; min-width: 100px; }
+            .counter-btn { width: 60px; height: 60px; font-size: 2rem; }
+            .measurement-card { grid-template-columns: 60px 1fr; }
+            .measurement-card .pos-nr { font-size: 1.4rem; }
+            .signal-banner h2 { font-size: 1.5rem; }
+        }
+
+        /* Manual entry form */
+        .manual-form { display: none; margin-top: 16px; }
+        .manual-form.visible { display: block; }
+        .manual-form textarea {
+            width: 100%;
+            min-height: 200px;
+            font-family: monospace;
+            font-size: 0.9rem;
+            padding: 12px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 12px;
+        }
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+        .btn-primary:hover { opacity: 0.9; }
+
+        /* Loaded file info */
+        .loaded-info {
+            display: none;
+            padding: 12px 16px;
+            background: #d4edda;
+            border-radius: 8px;
+            margin-top: 12px;
+            color: #155724;
+            font-weight: 600;
+        }
+        .loaded-info.visible { display: block; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Mess-Steuerung</h1>
+        <div class="info" id="headerInfo">Kein Prüfplan geladen</div>
+    </div>
+
+    <div class="container">
+        <!-- Setup Panel -->
+        <div class="setup-panel" id="setupPanel">
+            <h2>Prüfplan laden</h2>
+
+            <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+                <div class="icon">&#128196;</div>
+                <p>PDF-Prüfplan hier ablegen oder klicken</p>
+            </div>
+            <input type="file" id="fileInput" accept=".pdf" style="display:none">
+
+            <div class="loaded-info" id="loadedInfo"></div>
+
+            <button class="toggle-table-btn" onclick="toggleManualEntry()" style="margin-top:8px">
+                Manuell eingeben (CSV/JSON)
+            </button>
+
+            <div class="manual-form" id="manualForm">
+                <p style="margin-bottom:8px; color:#666;">
+                    CSV-Format: Pos;Prüfmerkmal;UT;OT;Messmittel;Prüfintervall;Dokumentation;Kapa
+                </p>
+                <textarea id="manualInput" placeholder="13;15;-0,200;0,200;Messschieber;1 aus 20 Teilen;Qualitätsregelkarte_REV05;F
+14;200;-0,200;0,200;Höhenmessgerät;1 aus 20 Teilen;Qualitätsregelkarte_REV05;D"></textarea>
+                <button class="btn-primary" onclick="parseManualInput()">Daten laden</button>
+            </div>
+
+            <!-- Kapa Filter -->
+            <div class="filter-row" id="filterRow" style="display:none; margin-top:16px;">
+                <label>Abteilung:</label>
+                <button class="kapa-btn active" data-kapa="" onclick="setKapaFilter(this, '')">Alle</button>
+                <button class="kapa-btn" data-kapa="D" onclick="setKapaFilter(this, 'D')">D (Drehen)</button>
+                <button class="kapa-btn" data-kapa="F" onclick="setKapaFilter(this, 'F')">F (Fräsen)</button>
+                <button class="kapa-btn" data-kapa="S" onclick="setKapaFilter(this, 'S')">S (Schleifen)</button>
+                <button class="kapa-btn" data-kapa="DF" onclick="setKapaFilter(this, 'DF')">DF (Drehen/Fräsen)</button>
+            </div>
+        </div>
+
+        <!-- Counter Section -->
+        <div class="counter-section" id="counterSection">
+            <h2>Teilezähler</h2>
+            <div class="part-counter">
+                <button class="counter-btn minus" onclick="changeCount(-1)">-</button>
+                <div class="count" id="partCount">0</div>
+                <button class="counter-btn plus" onclick="changeCount(1)">+</button>
+            </div>
+            <button class="counter-btn reset-btn" onclick="resetCount()">Zurücksetzen</button>
+
+            <div class="sound-toggle">
+                <input type="checkbox" id="soundToggle" checked>
+                <label for="soundToggle">Akustisches Signal bei Messung</label>
+            </div>
+
+            <div class="next-measurement-info" id="nextMeasurementInfo"></div>
+        </div>
+
+        <!-- Signal Area -->
+        <div class="signal-area" id="signalArea">
+            <div class="signal-banner ok" id="signalBanner">
+                <h2 id="signalTitle">Weiter produzieren</h2>
+                <p id="signalSubtitle">Keine Messung erforderlich</p>
+            </div>
+        </div>
+
+        <!-- Measurement Cards (due now) -->
+        <div class="measurements-container" id="measurementsContainer">
+            <h3 id="measurementsTitle">Jetzt zu messen:</h3>
+            <div id="measurementCards"></div>
+        </div>
+
+        <!-- All Positions Table -->
+        <div class="all-positions" id="allPositionsSection">
+            <button class="toggle-table-btn" onclick="toggleAllPositions()">
+                Gesamten Prüfplan anzeigen/verbergen
+            </button>
+            <div id="allPositionsTable" style="display:none;"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- State ---
+        let allPositions = [];
+        let filteredPositions = [];
+        let partCount = 0;
+        let kapaFilter = "";
+        let headerInfo = {};
+        let tableVisible = false;
+
+        // --- Audio ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playBeep() {
+            if (!document.getElementById("soundToggle").checked) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.frequency.value = 880;
+            osc.type = "square";
+            gain.gain.value = 0.3;
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.3);
+            // Second beep
+            setTimeout(() => {
+                const osc2 = audioCtx.createOscillator();
+                const gain2 = audioCtx.createGain();
+                osc2.connect(gain2);
+                gain2.connect(audioCtx.destination);
+                osc2.frequency.value = 1100;
+                osc2.type = "square";
+                gain2.gain.value = 0.3;
+                osc2.start();
+                osc2.stop(audioCtx.currentTime + 0.4);
+            }, 350);
+        }
+
+        // --- File Upload ---
+        const uploadArea = document.getElementById("uploadArea");
+        const fileInput = document.getElementById("fileInput");
+
+        uploadArea.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            uploadArea.classList.add("dragover");
+        });
+        uploadArea.addEventListener("dragleave", () => {
+            uploadArea.classList.remove("dragover");
+        });
+        uploadArea.addEventListener("drop", (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove("dragover");
+            if (e.dataTransfer.files.length > 0) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+        fileInput.addEventListener("change", () => {
+            if (fileInput.files.length > 0) {
+                handleFile(fileInput.files[0]);
+            }
+        });
+
+        function handleFile(file) {
+            if (!file.name.toLowerCase().endsWith(".pdf")) {
+                alert("Bitte nur PDF-Dateien hochladen.");
+                return;
+            }
+            const formData = new FormData();
+            formData.append("file", file);
+
+            uploadArea.innerHTML = '<div class="icon">&#9203;</div><p>Wird eingelesen...</p>';
+
+            fetch("/api/upload", {
+                method: "POST",
+                body: formData
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.error) {
+                    alert(data.error);
+                    resetUploadArea();
+                    return;
+                }
+                loadData(data, file.name);
+            })
+            .catch(err => {
+                alert("Fehler: " + err.message);
+                resetUploadArea();
+            });
+        }
+
+        function resetUploadArea() {
+            uploadArea.innerHTML = '<div class="icon">&#128196;</div><p>PDF-Prüfplan hier ablegen oder klicken</p>';
+        }
+
+        function loadData(data, source) {
+            headerInfo = data.header || {};
+            allPositions = data.positions || [];
+            partCount = 0;
+            document.getElementById("partCount").textContent = "0";
+
+            // Show loaded info
+            const info = document.getElementById("loadedInfo");
+            const posCount = allPositions.length;
+            info.textContent = `${source}: ${posCount} Messpositionen geladen` +
+                (headerInfo.bezeichnung ? ` | ${headerInfo.bezeichnung}` : "") +
+                (headerInfo.zeichnungs_nr ? ` | Zeichnung: ${headerInfo.zeichnungs_nr}` : "");
+            info.classList.add("visible");
+
+            document.getElementById("headerInfo").textContent =
+                (headerInfo.bezeichnung || source) +
+                (headerInfo.artikel_nr ? ` | Art. ${headerInfo.artikel_nr}` : "");
+
+            // Detect available Kapa values
+            const kapas = new Set(allPositions.map(p => p.kapa_kuerzel).filter(Boolean));
+            document.getElementById("filterRow").style.display = kapas.size > 0 ? "flex" : "none";
+
+            applyFilter();
+            document.getElementById("counterSection").classList.add("visible");
+            document.getElementById("signalArea").classList.add("visible");
+            document.getElementById("allPositionsSection").classList.add("visible");
+            renderAllPositionsTable();
+            updateMeasurements();
+        }
+
+        // --- Manual Entry ---
+        function toggleManualEntry() {
+            document.getElementById("manualForm").classList.toggle("visible");
+        }
+
+        function parseManualInput() {
+            const raw = document.getElementById("manualInput").value.trim();
+            if (!raw) return;
+
+            const positions = [];
+            const lines = raw.split("\n");
+            for (const line of lines) {
+                const parts = line.split(";");
+                if (parts.length < 6) continue;
+                positions.push({
+                    pos_nr: parts[0].trim(),
+                    pruefmerkmal: parts[1].trim(),
+                    ut: parts[2].trim(),
+                    ot: parts[3].trim(),
+                    messmittel: parts[4].trim(),
+                    pruefintervall_text: parts[5].trim(),
+                    pruefintervall: parsePruefintervall(parts[5].trim()),
+                    dokumentation: parts[6] ? parts[6].trim() : "",
+                    kapa_kuerzel: parts[7] ? parts[7].trim() : "",
+                });
+            }
+
+            if (positions.length === 0) {
+                alert("Keine gültigen Daten gefunden. Format: Pos;Merkmal;UT;OT;Messmittel;Intervall;Doku;Kapa");
+                return;
+            }
+
+            loadData({ header: {}, positions }, "Manuelle Eingabe");
+        }
+
+        function parsePruefintervall(text) {
+            if (!text) return 1;
+            if (text.toLowerCase().startsWith("jedes")) return 1;
+            const match = text.match(/1\s+aus\s+(\d+)/);
+            if (match) return parseInt(match[1]);
+            const nums = text.match(/\d+/g);
+            if (nums) return parseInt(nums[nums.length - 1]);
+            return 1;
+        }
+
+        // --- Kapa Filter ---
+        function setKapaFilter(btn, kapa) {
+            kapaFilter = kapa;
+            document.querySelectorAll(".kapa-btn").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            applyFilter();
+            updateMeasurements();
+            renderAllPositionsTable();
+        }
+
+        function applyFilter() {
+            if (kapaFilter) {
+                filteredPositions = allPositions.filter(p => p.kapa_kuerzel === kapaFilter);
+            } else {
+                filteredPositions = [...allPositions];
+            }
+        }
+
+        // --- Counter ---
+        function changeCount(delta) {
+            partCount = Math.max(0, partCount + delta);
+            document.getElementById("partCount").textContent = partCount;
+            updateMeasurements();
+        }
+
+        function resetCount() {
+            if (confirm("Teilezähler wirklich zurücksetzen?")) {
+                partCount = 0;
+                document.getElementById("partCount").textContent = "0";
+                updateMeasurements();
+            }
+        }
+
+        // --- Measurement Logic ---
+        function getMeasurementsDue(count) {
+            if (count === 0) return [];
+            return filteredPositions.filter(pos => {
+                const interval = pos.pruefintervall || 1;
+                return count % interval === 0;
+            });
+        }
+
+        function getNextMeasurementAt(count) {
+            // Find the next part number after `count` where any measurement is due
+            const intervals = [...new Set(filteredPositions.map(p => p.pruefintervall || 1))];
+            if (intervals.length === 0) return null;
+
+            for (let i = count + 1; i <= count + 1000; i++) {
+                for (const interval of intervals) {
+                    if (i % interval === 0) return i;
+                }
+            }
+            return null;
+        }
+
+        function updateMeasurements() {
+            const due = getMeasurementsDue(partCount);
+            const signalBanner = document.getElementById("signalBanner");
+            const signalTitle = document.getElementById("signalTitle");
+            const signalSubtitle = document.getElementById("signalSubtitle");
+            const cardsContainer = document.getElementById("measurementCards");
+            const measContainer = document.getElementById("measurementsContainer");
+
+            if (partCount === 0 || due.length === 0) {
+                signalBanner.className = "signal-banner ok";
+                signalTitle.textContent = partCount === 0 ? "Bereit" : "Weiter produzieren";
+                signalSubtitle.textContent = partCount === 0
+                    ? "Teilezähler starten, um Messvorgaben zu erhalten"
+                    : `Teil ${partCount} – Keine Messung erforderlich`;
+                measContainer.classList.remove("visible");
+                cardsContainer.innerHTML = "";
+            } else {
+                // MEASUREMENT DUE!
+                signalBanner.className = "signal-banner measure";
+                signalTitle.textContent = "JETZT MESSEN!";
+                signalSubtitle.textContent = `Teil ${partCount} – ${due.length} Messung(en) erforderlich`;
+                playBeep();
+
+                measContainer.classList.add("visible");
+                cardsContainer.innerHTML = due.map(pos => `
+                    <div class="measurement-card">
+                        <div class="pos-nr">${pos.pos_nr}</div>
+                        <div class="details">
+                            <div class="merkmal">${pos.pruefmerkmal}</div>
+                            <div class="toleranz">
+                                Toleranz: <span>UT ${pos.ut}</span> / <span>OT ${pos.ot}</span>
+                            </div>
+                            <div class="messmittel">Messmittel: <strong>${pos.messmittel}</strong></div>
+                            <div class="meta">
+                                ${pos.pruefintervall_text} | ${pos.dokumentation}
+                                ${pos.kapa_kuerzel ? " | " + pos.kapa_kuerzel : ""}
+                            </div>
+                        </div>
+                    </div>
+                `).join("");
+            }
+
+            // Next measurement info
+            const nextAt = getNextMeasurementAt(partCount);
+            const nextInfo = document.getElementById("nextMeasurementInfo");
+            if (nextAt !== null && (partCount === 0 || due.length === 0)) {
+                nextInfo.textContent = `Nächste Messung bei Teil ${nextAt} (in ${nextAt - partCount} Teilen)`;
+            } else if (due.length > 0) {
+                const nextAfter = getNextMeasurementAt(partCount);
+                if (nextAfter && nextAfter !== partCount) {
+                    nextInfo.textContent = `Nächste Messung danach bei Teil ${nextAfter} (in ${nextAfter - partCount} Teilen)`;
+                } else {
+                    nextInfo.textContent = "";
+                }
+            } else {
+                nextInfo.textContent = "";
+            }
+
+            // Highlight rows in table
+            highlightTableRows(due);
+        }
+
+        // --- All Positions Table ---
+        function toggleAllPositions() {
+            const el = document.getElementById("allPositionsTable");
+            tableVisible = !tableVisible;
+            el.style.display = tableVisible ? "block" : "none";
+        }
+
+        function renderAllPositionsTable() {
+            const container = document.getElementById("allPositionsTable");
+            if (filteredPositions.length === 0) {
+                container.innerHTML = "<p>Keine Daten geladen.</p>";
+                return;
+            }
+            let html = `<table>
+                <thead>
+                    <tr>
+                        <th>Pos.</th>
+                        <th>Prüfmerkmal</th>
+                        <th>UT</th>
+                        <th>OT</th>
+                        <th>Messmittel</th>
+                        <th>Prüfintervall</th>
+                        <th>Dokumentation</th>
+                        <th>Kapa</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+            for (const pos of filteredPositions) {
+                html += `<tr data-pos="${pos.pos_nr}">
+                    <td>${pos.pos_nr}</td>
+                    <td><strong>${pos.pruefmerkmal}</strong></td>
+                    <td>${pos.ut}</td>
+                    <td>${pos.ot}</td>
+                    <td>${pos.messmittel}</td>
+                    <td>${pos.pruefintervall_text}</td>
+                    <td>${pos.dokumentation}</td>
+                    <td>${pos.kapa_kuerzel}</td>
+                </tr>`;
+            }
+            html += "</tbody></table>";
+            container.innerHTML = html;
+        }
+
+        function highlightTableRows(due) {
+            const duePositions = new Set(due.map(d => d.pos_nr));
+            document.querySelectorAll("#allPositionsTable tr[data-pos]").forEach(row => {
+                if (duePositions.has(row.dataset.pos)) {
+                    row.classList.add("highlight");
+                } else {
+                    row.classList.remove("highlight");
+                }
+            });
+        }
+
+        // --- Keyboard shortcuts ---
+        document.addEventListener("keydown", (e) => {
+            if (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT") return;
+            if (e.key === "+" || e.key === "ArrowRight" || e.key === " ") {
+                e.preventDefault();
+                changeCount(1);
+            } else if (e.key === "-" || e.key === "ArrowLeft") {
+                e.preventDefault();
+                changeCount(-1);
+            }
+        });
+    </script>
+</body>
+</html>
