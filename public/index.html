@@ -534,6 +534,9 @@
             partCount = 0;
             document.getElementById("partCount").textContent = "0";
 
+            // Reset upload area to success state
+            uploadArea.innerHTML = '<div class="icon">&#9989;</div><p>Prüfplan geladen – erneut klicken zum Ersetzen</p>';
+
             // Show loaded info
             const info = document.getElementById("loadedInfo");
             const posCount = allPositions.length;
