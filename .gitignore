@@ -5,3 +5,5 @@ venv/
 uploads/
 *.pdf
 instance/
+.vercel/
+node_modules/
