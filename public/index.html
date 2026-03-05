@@ -382,15 +382,12 @@
                 <button class="btn-primary" onclick="parseManualInput()">Daten laden</button>
             </div>
 
-            <!-- Kapa Filter -->
+            <!-- Kapa Filter (dynamisch befüllt) -->
             <div class="filter-row" id="filterRow" style="display:none; margin-top:16px;">
                 <label>Abteilung:</label>
-                <button class="kapa-btn active" data-kapa="" onclick="setKapaFilter(this, '')">Alle</button>
-                <button class="kapa-btn" data-kapa="D" onclick="setKapaFilter(this, 'D')">D (Drehen)</button>
-                <button class="kapa-btn" data-kapa="F" onclick="setKapaFilter(this, 'F')">F (Fräsen)</button>
-                <button class="kapa-btn" data-kapa="S" onclick="setKapaFilter(this, 'S')">S (Schleifen)</button>
-                <button class="kapa-btn" data-kapa="DF" onclick="setKapaFilter(this, 'DF')">DF (Drehen/Fräsen)</button>
+                <div id="kapaButtons"></div>
             </div>
+            <div id="filterInfo" style="display:none; margin-top:8px; font-size:0.9rem; color:#666;"></div>
         </div>
 
         <!-- Counter Section -->
@@ -549,9 +546,21 @@
                 (headerInfo.bezeichnung || source) +
                 (headerInfo.artikel_nr ? ` | Art. ${headerInfo.artikel_nr}` : "");
 
-            // Detect available Kapa values
+            // Dynamically build Kapa filter buttons from actual data
             const kapas = new Set(allPositions.map(p => p.kapa_kuerzel).filter(Boolean));
-            document.getElementById("filterRow").style.display = kapas.size > 0 ? "flex" : "none";
+            const filterRow = document.getElementById("filterRow");
+            const kapaButtonsContainer = document.getElementById("kapaButtons");
+            if (kapas.size > 0) {
+                filterRow.style.display = "flex";
+                let btns = `<button class="kapa-btn active" data-kapa="" onclick="setKapaFilter(this, '')">Alle (${allPositions.length})</button>`;
+                for (const k of [...kapas].sort()) {
+                    const count = allPositions.filter(p => p.kapa_kuerzel === k).length;
+                    btns += `<button class="kapa-btn" data-kapa="${k}" onclick="setKapaFilter(this, '${k}')">${k} (${count})</button>`;
+                }
+                kapaButtonsContainer.innerHTML = btns;
+            } else {
+                filterRow.style.display = "none";
+            }
 
             applyFilter();
             document.getElementById("counterSection").classList.add("visible");
@@ -622,6 +631,12 @@
             } else {
                 filteredPositions = [...allPositions];
             }
+            // Show filter info with intervals for debugging
+            const filterInfo = document.getElementById("filterInfo");
+            const intervals = [...new Set(filteredPositions.map(p => p.pruefintervall))].sort((a, b) => a - b);
+            filterInfo.style.display = "block";
+            filterInfo.textContent = `${filteredPositions.length} Positionen` +
+                (intervals.length > 0 ? ` | Intervalle: ${intervals.map(i => "1/" + i).join(", ")}` : "");
         }
 
         // --- Counter ---
