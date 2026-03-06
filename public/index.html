@@ -347,6 +347,9 @@
             font-size: 0.95rem;
             padding: 6px 10px;
         }
+        .due-table .group-header { cursor: pointer; transition: filter 0.15s; }
+        .due-table .group-header:hover { filter: brightness(1.2); }
+        .due-table .group-header.selected-group td { background: var(--warning); color: #333; }
         .due-table .pos-cell { font-weight: 700; color: var(--primary); white-space: nowrap; }
         .due-table .merkmal-cell { font-weight: 600; }
         .due-table .tol-cell { font-size: 0.85rem; color: #555; white-space: nowrap; }
@@ -487,7 +490,7 @@
             font-size: 0.7rem;
             font-weight: 700;
             color: var(--primary);
-            pointer-events: none;
+            cursor: pointer;
             z-index: 2;
             transition: all 0.2s;
         }
@@ -1111,9 +1114,10 @@
                 let html = `<table class="due-table">
                     <thead><tr><th>Pos</th><th>Prüfmerkmal</th><th>UT</th><th>OT</th></tr></thead><tbody>`;
                 for (const [messmittel, items] of Object.entries(groups)) {
-                    html += `<tr class="group-header"><td colspan="4">${messmittel}</td></tr>`;
+                    const groupPosNrs = items.map(p => p.pos_nr);
+                    html += `<tr class="group-header" onclick="highlightGroup(${JSON.stringify(groupPosNrs).replace(/"/g,'&quot;')})" data-group="${messmittel}"><td colspan="4">${messmittel}</td></tr>`;
                     for (const pos of items) {
-                        html += `<tr onclick="highlightDrawingPos('${pos.pos_nr}')" data-pos="${pos.pos_nr}">
+                        html += `<tr onclick="highlightDrawingPos('${pos.pos_nr}')" data-pos="${pos.pos_nr}" data-group="${messmittel}">
                             <td class="pos-cell">${pos.pos_nr}</td>
                             <td class="merkmal-cell">${pos.pruefmerkmal}</td>
                             <td class="tol-cell">${pos.ut}</td>
@@ -1202,7 +1206,7 @@
         // --- Drawing / Calibration ---
         let drawingMarkers = {}; // { "pos_nr": { x: 0-1, y: 0-1 } } relative coords
         let calibrationMode = false;
-        let selectedHighlight = null;
+        let highlightedPositions = new Set(); // pos_nrs currently highlighted
         let lastDrawingFile = null; // remember last uploaded file for re-detection
 
         const drawingUploadArea = document.getElementById("drawingUploadArea");
@@ -1342,30 +1346,109 @@
             return String(posNr).split(".")[0];
         }
 
+        function highlightedDrawingKeys() {
+            // Convert highlighted pos_nrs (e.g. "5.1") to drawing keys (e.g. "5")
+            const keys = new Set();
+            for (const p of highlightedPositions) keys.add(drawingPosKey(p));
+            return keys;
+        }
+
         function renderMarkers() {
             drawingInner.querySelectorAll(".drawing-marker").forEach(m => m.remove());
-            const hlKey = selectedHighlight ? drawingPosKey(selectedHighlight) : null;
+            const hlKeys = highlightedDrawingKeys();
             for (const [posNr, coords] of Object.entries(drawingMarkers)) {
                 const marker = document.createElement("div");
                 marker.className = "drawing-marker";
-                if (hlKey === posNr) marker.classList.add("highlight");
+                if (hlKeys.has(posNr)) marker.classList.add("highlight");
                 marker.dataset.pos = posNr;
                 marker.textContent = posNr;
                 marker.style.left = (coords.x * 100) + "%";
                 marker.style.top = (coords.y * 100) + "%";
+                marker.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    if (calibrationMode) return;
+                    onMarkerClick(posNr);
+                });
                 drawingInner.appendChild(marker);
             }
         }
 
-        function highlightDrawingPos(posNr) {
-            selectedHighlight = (selectedHighlight === posNr) ? null : posNr;
-            renderMarkers();
-            document.querySelectorAll(".due-table tr, #allPositionsTable tr").forEach(row => {
-                row.classList.toggle("selected-row", row.dataset.pos === selectedHighlight);
+        function syncTableHighlights() {
+            // Sync table row highlights with highlightedPositions
+            document.querySelectorAll(".due-table tr[data-pos], #allPositionsTable tr[data-pos]").forEach(row => {
+                row.classList.toggle("selected-row", highlightedPositions.has(row.dataset.pos));
             });
+            // Sync group header highlights
+            document.querySelectorAll(".due-table .group-header[data-group]").forEach(gh => {
+                const groupName = gh.dataset.group;
+                const groupRows = document.querySelectorAll(`.due-table tr[data-group="${groupName}"][data-pos]`);
+                const allSelected = groupRows.length > 0 && [...groupRows].every(r => highlightedPositions.has(r.dataset.pos));
+                gh.classList.toggle("selected-group", allSelected);
+            });
+        }
+
+        function highlightDrawingPos(posNr) {
+            // Toggle single position
+            if (highlightedPositions.has(posNr)) {
+                highlightedPositions.delete(posNr);
+            } else {
+                highlightedPositions.clear();
+                highlightedPositions.add(posNr);
+            }
+            renderMarkers();
+            syncTableHighlights();
             const markerKey = drawingPosKey(posNr);
-            if (selectedHighlight && drawingMarkers[markerKey]) {
+            if (highlightedPositions.has(posNr) && drawingMarkers[markerKey]) {
                 document.getElementById("drawingSection").scrollIntoView({ behavior: "smooth", block: "nearest" });
+            }
+        }
+
+        function highlightGroup(posNrs) {
+            // Toggle entire group: if all are highlighted, clear; otherwise highlight all
+            const allActive = posNrs.every(p => highlightedPositions.has(p));
+            highlightedPositions.clear();
+            if (!allActive) {
+                for (const p of posNrs) highlightedPositions.add(p);
+            }
+            renderMarkers();
+            syncTableHighlights();
+            if (highlightedPositions.size > 0) {
+                document.getElementById("drawingSection").scrollIntoView({ behavior: "smooth", block: "nearest" });
+            }
+        }
+
+        function onMarkerClick(drawingPosNr) {
+            // Click on drawing marker -> find matching table positions
+            // Drawing marker "5" should match table pos "5", "5.1", "5.2" etc.
+            const matchingPosNrs = [];
+            document.querySelectorAll(".due-table tr[data-pos]").forEach(row => {
+                if (drawingPosKey(row.dataset.pos) === drawingPosNr) {
+                    matchingPosNrs.push(row.dataset.pos);
+                }
+            });
+            if (matchingPosNrs.length === 0) {
+                // Try all-positions table
+                document.querySelectorAll("#allPositionsTable tr[data-pos]").forEach(row => {
+                    if (drawingPosKey(row.dataset.pos) === drawingPosNr) {
+                        matchingPosNrs.push(row.dataset.pos);
+                    }
+                });
+            }
+
+            // Toggle: if all matching are already highlighted, clear
+            const allActive = matchingPosNrs.length > 0 && matchingPosNrs.every(p => highlightedPositions.has(p));
+            highlightedPositions.clear();
+            if (!allActive) {
+                for (const p of matchingPosNrs) highlightedPositions.add(p);
+                if (matchingPosNrs.length === 0) highlightedPositions.add(drawingPosNr);
+            }
+            renderMarkers();
+            syncTableHighlights();
+
+            // Scroll to first matched row in measurements table
+            if (highlightedPositions.size > 0) {
+                const firstRow = document.querySelector(".due-table tr.selected-row, #allPositionsTable tr.selected-row");
+                if (firstRow) firstRow.scrollIntoView({ behavior: "smooth", block: "nearest" });
             }
         }
 
@@ -1376,7 +1459,7 @@
             }
             if (!confirm("Alle Markierungen löschen und Zeichnung neu analysieren?")) return;
             drawingMarkers = {};
-            selectedHighlight = null;
+            highlightedPositions.clear();
             renderMarkers();
             saveMarkers();
             loadDrawing(lastDrawingFile);
@@ -1385,7 +1468,7 @@
         function replaceDrawing() {
             if (calibrationMode) toggleCalibration();
             drawingMarkers = {};
-            selectedHighlight = null;
+            highlightedPositions.clear();
             lastDrawingFile = null;
             renderMarkers();
             saveMarkers();
@@ -1399,7 +1482,7 @@
         function clearAllMarkers() {
             if (!confirm("Alle Markierungen löschen?")) return;
             drawingMarkers = {};
-            selectedHighlight = null;
+            highlightedPositions.clear();
             renderMarkers();
             saveMarkers();
         }
