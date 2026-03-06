@@ -664,7 +664,7 @@
         .artikel-form .file-row .file-status.ok { color: var(--success); font-weight: 600; }
         .artikel-form .btn-row { display: flex; gap: 8px; margin-top: 12px; }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
     <div class="header">
@@ -854,13 +854,19 @@
         // --- Supabase Client ---
         const SUPABASE_URL = "https://gnaqzjdocadcilzgippr.supabase.co";
         const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImduYXF6amRvY2FkY2lsemdpcHByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3ODI5NzAsImV4cCI6MjA4ODM1ODk3MH0.d_mIv-yy1jXEUc2TIzH5uSItzruh1KDvXpn_wV82thw";
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        let sb = null;
         const BUCKET = "artikel-dateien";
+        try {
+            const { createClient } = window.supabase || {};
+            if (createClient) sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            else console.error("Supabase JS nicht geladen");
+        } catch(e) { console.error("Supabase init fehlgeschlagen:", e); }
 
         // --- Article Database (Supabase) ---
         async function fetchArtikelList() {
+            if (!sb) return;
             try {
-                const { data, error } = await supabase
+                const { data, error } = await sb
                     .from("artikel")
                     .select("*")
                     .order("artikel_nr").order("version");
@@ -920,8 +926,8 @@
             const ext = file.name.split(".").pop();
             const path = `${artId}/${fileType}.${ext}`;
             // Remove old file first (ignore errors)
-            await supabase.storage.from(BUCKET).remove([path]);
-            const { error } = await supabase.storage.from(BUCKET).upload(path, file, { upsert: true });
+            await sb.storage.from(BUCKET).remove([path]);
+            const { error } = await sb.storage.from(BUCKET).upload(path, file, { upsert: true });
             if (error) throw error;
             return path;
         }
@@ -939,10 +945,10 @@
             let artId = editArtikelId;
             try {
                 if (artId) {
-                    const { error } = await supabase.from("artikel").update(row).eq("id", artId);
+                    const { error } = await sb.from("artikel").update(row).eq("id", artId);
                     if (error) throw error;
                 } else {
-                    const { data, error } = await supabase.from("artikel").insert(row).select().single();
+                    const { data, error } = await sb.from("artikel").insert(row).select().single();
                     if (error) {
                         if (error.code === "23505") { alert("Artikel + Version existiert bereits"); return; }
                         throw error;
@@ -957,7 +963,7 @@
                 if (mpFile) updates.messplan_file = await uploadFileToStorage(artId, "messplan", mpFile);
                 if (zFile) updates.zeichnung_file = await uploadFileToStorage(artId, "zeichnung", zFile);
                 if (Object.keys(updates).length > 0) {
-                    const { error } = await supabase.from("artikel").update(updates).eq("id", artId);
+                    const { error } = await sb.from("artikel").update(updates).eq("id", artId);
                     if (error) throw error;
                 }
 
@@ -975,11 +981,11 @@
             const art = artikelList.find(a => a.id === parseInt(sel.value));
             if (!confirm(`Artikel "${art.artikel_nr} – ${art.bezeichnung}" wirklich löschen?`)) return;
             // Delete files from storage
-            const { data: files } = await supabase.storage.from(BUCKET).list(String(art.id));
+            const { data: files } = await sb.storage.from(BUCKET).list(String(art.id));
             if (files && files.length > 0) {
-                await supabase.storage.from(BUCKET).remove(files.map(f => `${art.id}/${f.name}`));
+                await sb.storage.from(BUCKET).remove(files.map(f => `${art.id}/${f.name}`));
             }
-            const { error } = await supabase.from("artikel").delete().eq("id", art.id);
+            const { error } = await sb.from("artikel").delete().eq("id", art.id);
             if (error) { alert("Fehler: " + error.message); return; }
             await fetchArtikelList();
         }
@@ -993,7 +999,7 @@
             try {
                 // Load Messplan PDF from Supabase Storage → send to existing /api/upload
                 if (art.messplan_file) {
-                    const { data: blob, error } = await supabase.storage.from(BUCKET).download(art.messplan_file);
+                    const { data: blob, error } = await sb.storage.from(BUCKET).download(art.messplan_file);
                     if (error) throw error;
                     const fd = new FormData();
                     fd.append("file", blob, art.messplan_file.split("/").pop());
@@ -1008,7 +1014,7 @@
 
                 // Load Zeichnung PDF from Supabase Storage → send to existing /api/upload-drawing
                 if (art.zeichnung_file) {
-                    const { data: blob, error } = await supabase.storage.from(BUCKET).download(art.zeichnung_file);
+                    const { data: blob, error } = await sb.storage.from(BUCKET).download(art.zeichnung_file);
                     if (error) throw error;
                     const fd = new FormData();
                     fd.append("file", blob, art.zeichnung_file.split("/").pop());
