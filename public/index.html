@@ -939,7 +939,8 @@
 
         function applyFilter() {
             if (kapaFilter) {
-                filteredPositions = allPositions.filter(p => p.kapa_kuerzel === kapaFilter);
+                // "D" matches "D", "DF", "DS"; "F" matches "F", "DF" etc.
+                filteredPositions = allPositions.filter(p => p.kapa_kuerzel.includes(kapaFilter));
             } else {
                 filteredPositions = [...allPositions];
             }
