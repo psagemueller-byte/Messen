@@ -641,6 +641,8 @@
                     <span id="drawingStatus" style="font-size:0.85rem;color:#666"></span>
                     <select id="calibPosSelect"></select>
                     <button class="calib-btn" id="calibBtn" onclick="toggleCalibration()">Manuell korrigieren</button>
+                    <button class="calib-btn" onclick="redetectMarkers()" style="border-color:#0066cc;color:#0066cc" title="Punkte löschen und neu erkennen">&#x21bb; Neu erkennen</button>
+                    <button class="calib-btn" onclick="replaceDrawing()" style="border-color:#666;color:#666" title="Andere Zeichnung laden">&#x1f4c4; Zeichnung tauschen</button>
                     <button class="calib-btn" onclick="clearAllMarkers()" style="border-color:#dc3545;color:#dc3545">Alle löschen</button>
                 </div>
             </div>
@@ -1162,6 +1164,7 @@
         let drawingMarkers = {}; // { "pos_nr": { x: 0-1, y: 0-1 } } relative coords
         let calibrationMode = false;
         let selectedHighlight = null;
+        let lastDrawingFile = null; // remember last uploaded file for re-detection
 
         const drawingUploadArea = document.getElementById("drawingUploadArea");
         const drawingInput = document.getElementById("drawingInput");
@@ -1189,8 +1192,10 @@
                 return;
             }
 
+            lastDrawingFile = file;
+
             if (isPDF) {
-                // Upload to server for vector-based extraction
+                // Upload to server for raster-based extraction
                 drawingUploadArea.innerHTML = '<p>Wird analysiert...</p>';
                 const formData = new FormData();
                 formData.append("file", file);
@@ -1220,7 +1225,7 @@
                                 renderMarkers();
                                 saveMarkers();
                                 document.getElementById("drawingStatus").textContent =
-                                    `${data.matched_markers}/${data.detected_circles} Messpunkte erkannt`;
+                                    `${data.matched_markers} Messpunkte erkannt`;
                             } else {
                                 restoreMarkers();
                                 document.getElementById("drawingStatus").textContent =
@@ -1316,6 +1321,33 @@
             if (selectedHighlight && drawingMarkers[posNr]) {
                 document.getElementById("drawingSection").scrollIntoView({ behavior: "smooth", block: "nearest" });
             }
+        }
+
+        function redetectMarkers() {
+            if (!lastDrawingFile) {
+                alert("Keine Zeichnung vorhanden. Bitte zuerst eine Zeichnung hochladen.");
+                return;
+            }
+            if (!confirm("Alle Markierungen löschen und Zeichnung neu analysieren?")) return;
+            drawingMarkers = {};
+            selectedHighlight = null;
+            renderMarkers();
+            saveMarkers();
+            loadDrawing(lastDrawingFile);
+        }
+
+        function replaceDrawing() {
+            if (calibrationMode) toggleCalibration();
+            drawingMarkers = {};
+            selectedHighlight = null;
+            lastDrawingFile = null;
+            renderMarkers();
+            saveMarkers();
+            drawingViewer.style.display = "none";
+            document.getElementById("drawingToolbar").style.display = "none";
+            drawingUploadArea.style.display = "";
+            drawingUploadArea.innerHTML = "Zeichnungs-PDF hier ablegen oder klicken";
+            drawingInput.value = "";
         }
 
         function clearAllMarkers() {
