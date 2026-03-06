@@ -17,7 +17,6 @@ import pdfplumber
 import fitz  # PyMuPDF
 import cv2
 import numpy as np
-import pytesseract
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB
@@ -341,10 +340,11 @@ def _extract_markers_raster(doc, page):
         hull = cv2.convexHull(c)
         raw_markers.append({"x": x, "y": y, "w": w, "h": h, "hull": hull})
 
-    # OCR each marker's circle-head interior
+    # Read the number inside each marker's circle head
     markers = []
     for m in raw_markers:
-        pos_nr = _ocr_marker_head(img, red_mask, m, img_w, img_h)
+        interior_gray = _extract_marker_interior(img, red_mask, m, img_w, img_h)
+        pos_nr = _recognize_number(interior_gray)
         cx = m["x"] + m["w"] // 2
         cy = m["y"] + m["h"] // 2
         markers.append({
@@ -356,12 +356,12 @@ def _extract_markers_raster(doc, page):
     return markers
 
 
-def _ocr_marker_head(img, red_mask, m, img_w, img_h):
-    """Read the number inside the circular head of a map-pin marker.
+def _extract_marker_interior(img, red_mask, m, img_w, img_h):
+    """Extract the white circle-head interior as a grayscale crop.
 
-    Strategy: fill the convex hull of the marker, subtract the red ring,
-    find the largest white interior blob (the circle head), mask everything
-    else out, and run OCR on it.
+    Fills the convex hull of the marker, subtracts red pixels, finds the
+    largest remaining blob (the white circle head), and returns only that
+    area with everything else masked to white.
     """
     x, y, w, h = m["x"], m["y"], m["w"], m["h"]
     pad = 5
@@ -372,50 +372,78 @@ def _ocr_marker_head(img, red_mask, m, img_w, img_h):
     crop_red = red_mask[y1:y2, x1:x2]
     ch, cw = crop.shape[:2]
 
-    # Fill convex hull to get marker boundary
     hull_mask = np.zeros((ch, cw), dtype=np.uint8)
     shifted_hull = m["hull"] - np.array([x1, y1])
     cv2.fillConvexPoly(hull_mask, shifted_hull, 255)
 
-    # Interior = inside hull AND not red
     interior = hull_mask & cv2.bitwise_not(crop_red)
 
-    # Find largest connected component (the white circle head)
     n_labels, labels, stats, _ = cv2.connectedComponentsWithStats(interior)
     if n_labels < 2:
-        return ""
+        return None
     largest = max(range(1, n_labels), key=lambda i: stats[i, cv2.CC_STAT_AREA])
     circle_interior = (labels == largest).astype(np.uint8) * 255
 
     ix, iy, iw, ih = cv2.boundingRect(circle_interior)
     if iw < 5 or ih < 5:
-        return ""
+        return None
 
-    # Extract grayscale, mask outside circle to white
     gray = cv2.cvtColor(crop, cv2.COLOR_RGB2GRAY)
     gray[circle_interior == 0] = 255
-    interior_crop = gray[iy:iy + ih, ix:ix + iw]
+    return gray[iy:iy + ih, ix:ix + iw]
 
-    # Try multiple thresholds and PSM modes, pick best valid result
-    best = ""
-    for thresh_val in [120, 150, 180, 200]:
-        _, thresh = cv2.threshold(interior_crop, thresh_val, 255,
-                                  cv2.THRESH_BINARY_INV)
-        big = cv2.resize(thresh, None, fx=6, fy=6,
-                         interpolation=cv2.INTER_CUBIC)
-        bordered = cv2.copyMakeBorder(big, 50, 50, 50, 50,
-                                      cv2.BORDER_CONSTANT, value=0)
-        bordered = cv2.bitwise_not(bordered)
 
-        for psm in [7, 10, 13]:
-            text = pytesseract.image_to_string(
-                bordered,
-                config=f"--psm {psm} -c tessedit_char_whitelist=0123456789",
-            ).strip()
-            if text and text.isdigit() and 1 <= int(text) <= 999:
-                if not best or len(text) >= len(best):
-                    best = text
-    return best
+def _recognize_number(interior_gray, max_num=50):
+    """Recognize a position number using OpenCV template matching.
+
+    Renders each candidate number (1..max_num) with cv2.putText, resizes it
+    to match the text crop dimensions, and picks the best match via
+    normalized cross-correlation.  No external OCR binary needed.
+    """
+    if interior_gray is None:
+        return ""
+
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    best_result = ""
+    best_score = -1
+
+    for thresh_val in [140, 160, 180]:
+        _, binary = cv2.threshold(interior_gray, thresh_val, 255,
+                                  cv2.THRESH_BINARY)
+        text_coords = np.where(binary < 128)
+        if len(text_coords[0]) < 10:
+            continue
+
+        y_min, y_max = text_coords[0].min(), text_coords[0].max()
+        x_min, x_max = text_coords[1].min(), text_coords[1].max()
+        text_crop = binary[y_min:y_max + 1, x_min:x_max + 1]
+        th, tw = text_crop.shape
+        if th < 3 or tw < 3:
+            continue
+
+        for num in range(1, max_num + 1):
+            text = str(num)
+            for scale in [0.8, 1.0, 1.2]:
+                (rtw, rth), _ = cv2.getTextSize(text, font, scale, 2)
+                canvas = np.ones((rth + 10, rtw + 10), dtype=np.uint8) * 255
+                cv2.putText(canvas, text, (5, rth + 5), font, scale, 0, 2,
+                            cv2.LINE_AA)
+
+                rc = np.where(canvas < 128)
+                if len(rc[0]) == 0:
+                    continue
+                rendered = canvas[rc[0].min():rc[0].max() + 1,
+                                  rc[1].min():rc[1].max() + 1]
+
+                resized = cv2.resize(rendered, (tw, th),
+                                     interpolation=cv2.INTER_AREA)
+                score = cv2.matchTemplate(text_crop, resized,
+                                          cv2.TM_CCOEFF_NORMED)
+                if score.size > 0 and score.max() > best_score:
+                    best_score = score.max()
+                    best_result = text
+
+    return best_result if best_score > 0.3 else ""
 
 
 def _extract_markers_vector(doc, page, pw, ph):
