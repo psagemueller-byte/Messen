@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS artikel (
     ident_nr TEXT NOT NULL DEFAULT '',
     zeichnungs_nr TEXT NOT NULL DEFAULT '',
     version TEXT NOT NULL DEFAULT '',
+    taktzeit INTEGER NOT NULL DEFAULT 30,
     messplan_file TEXT,
     zeichnung_file TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),

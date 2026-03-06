@@ -676,6 +676,7 @@
                     <div><label>Ident-Nr.</label><input id="afIdentNr"></div>
                     <div><label>Zeichnungs-Nr.</label><input id="afZeichnungsNr"></div>
                     <div><label>Version</label><input id="afVersion"></div>
+                    <div><label>Taktzeit (s)</label><input id="afTaktzeit" type="number" min="1" max="9999" value="30"></div>
                 </div>
                 <div class="file-row">
                     <label>Messplan:</label>
@@ -854,6 +855,7 @@
                 document.getElementById("afIdentNr").value = art.ident_nr;
                 document.getElementById("afZeichnungsNr").value = art.zeichnungs_nr;
                 document.getElementById("afVersion").value = art.version;
+                document.getElementById("afTaktzeit").value = art.taktzeit || 30;
                 document.getElementById("afMessplanStatus").textContent = art.messplan_file ? art.messplan_file.split("/").pop() : "Keine Datei";
                 document.getElementById("afMessplanStatus").className = "file-status" + (art.messplan_file ? " ok" : "");
                 document.getElementById("afZeichnungStatus").textContent = art.zeichnung_file ? art.zeichnung_file.split("/").pop() : "Keine Datei";
@@ -866,6 +868,7 @@
                 document.getElementById("afIdentNr").value = "";
                 document.getElementById("afZeichnungsNr").value = "";
                 document.getElementById("afVersion").value = "";
+                document.getElementById("afTaktzeit").value = 30;
                 document.getElementById("afMessplanStatus").textContent = "Keine Datei";
                 document.getElementById("afMessplanStatus").className = "file-status";
                 document.getElementById("afZeichnungStatus").textContent = "Keine Datei";
@@ -891,6 +894,7 @@
                 ident_nr: document.getElementById("afIdentNr").value.trim(),
                 zeichnungs_nr: document.getElementById("afZeichnungsNr").value.trim(),
                 version: document.getElementById("afVersion").value.trim(),
+                taktzeit: parseInt(document.getElementById("afTaktzeit").value) || 30,
             };
             if (!row.artikel_nr) { alert("Artikelnummer ist Pflicht"); return; }
 
@@ -949,6 +953,11 @@
             document.getElementById("headerInfo").textContent = `Lade ${art.artikel_nr}...`;
 
             try {
+                // Set Taktzeit from article
+                if (art.taktzeit) {
+                    document.getElementById("taktInput").value = art.taktzeit;
+                }
+
                 // Load Messplan PDF from Supabase Storage → send to existing /api/upload
                 if (art.messplan_file) {
                     const { data: blob, error } = await sb.storage.from(BUCKET).download(art.messplan_file);
