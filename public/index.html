@@ -40,9 +40,28 @@
 
         /* Main layout */
         .container {
-            max-width: 1200px;
+            max-width: 1800px;
             margin: 0 auto;
             padding: 20px;
+        }
+
+        .work-area {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+            margin-bottom: 20px;
+        }
+        .work-area > .measurements-container {
+            flex: 0 0 420px;
+            min-width: 0;
+            position: sticky;
+            top: 20px;
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+        }
+        .work-area > .drawing-section {
+            flex: 1 1 0;
+            min-width: 0;
         }
 
         /* Setup panel */
@@ -292,7 +311,7 @@
         .measurements-container {
             display: none;
         }
-        .measurements-container.visible { display: block; }
+        .work-area > .measurements-container.visible { display: block; }
         .measurements-container h3 {
             margin-bottom: 10px;
             font-size: 1.1rem;
@@ -439,7 +458,7 @@
             border-radius: 8px;
             background: #fafafa;
             cursor: default;
-            max-height: 70vh;
+            max-height: calc(100vh - 120px);
         }
         .drawing-viewer.calibrating { cursor: crosshair; }
         .drawing-inner {
@@ -504,6 +523,24 @@
         .due-table tbody tr.selected-row { background: #fff3cd; }
 
         /* Responsive */
+        @media (max-width: 1024px) {
+            .work-area {
+                flex-direction: column;
+            }
+            .work-area > .measurements-container {
+                flex: none;
+                width: 100%;
+                position: static;
+                max-height: none;
+            }
+            .work-area > .drawing-section {
+                flex: none;
+                width: 100%;
+            }
+            .container {
+                max-width: 1200px;
+            }
+        }
         @media (max-width: 768px) {
             .header h1 { font-size: 1.2rem; }
             .part-counter .count { font-size: 3rem; min-width: 100px; }
@@ -633,8 +670,24 @@
             <div class="next-measurement-info" id="nextMeasurementInfo"></div>
         </div>
 
-        <!-- Drawing Section -->
-        <div class="drawing-section" id="drawingSection">
+        <!-- Signal Area -->
+        <div class="signal-area" id="signalArea">
+            <div class="signal-banner ok" id="signalBanner">
+                <h2 id="signalTitle">Weiter produzieren</h2>
+                <p id="signalSubtitle">Keine Messung erforderlich</p>
+            </div>
+        </div>
+
+        <!-- Side-by-side: Measurements + Drawing -->
+        <div class="work-area" id="workArea">
+            <!-- Measurement Cards (due now) -->
+            <div class="measurements-container" id="measurementsContainer">
+                <h3 id="measurementsTitle">Jetzt zu messen:</h3>
+                <div id="measurementCards"></div>
+            </div>
+
+            <!-- Drawing Section -->
+            <div class="drawing-section" id="drawingSection">
             <div class="drawing-header">
                 <h3>Messpunktzeichnung</h3>
                 <div class="drawing-toolbar" id="drawingToolbar" style="display:none">
@@ -655,21 +708,7 @@
                     <img id="drawingImg" src="" alt="Messpunktzeichnung">
                 </div>
             </div>
-        </div>
-
-        <!-- Signal Area -->
-        <div class="signal-area" id="signalArea">
-            <div class="signal-banner ok" id="signalBanner">
-                <h2 id="signalTitle">Weiter produzieren</h2>
-                <p id="signalSubtitle">Keine Messung erforderlich</p>
-            </div>
-        </div>
-
-        <!-- Measurement Cards (due now) -->
-        <div class="measurements-container" id="measurementsContainer">
-            <h3 id="measurementsTitle">Jetzt zu messen:</h3>
-            <div id="measurementCards"></div>
-        </div>
+        </div> <!-- /work-area -->
 
         <!-- All Positions Table -->
         <div class="all-positions" id="allPositionsSection">
