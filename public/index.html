@@ -1201,12 +1201,12 @@
         }
 
         // --- Auto-Detection of red circle markers ---
+        // Optimized: downscales image to max 1500px, uses efficient BFS with index pointer
         function autoDetectMarkers() {
             const btn = document.getElementById("autoDetectBtn");
             btn.textContent = "Erkennung läuft...";
             btn.disabled = true;
 
-            // Use requestAnimationFrame to let UI update before heavy computation
             requestAnimationFrame(() => {
                 setTimeout(() => {
                     try {
@@ -1218,12 +1218,8 @@
                             return;
                         }
 
-                        // Try to read numbers from each detected circle
-                        const labeled = readCircleNumbers(detected);
-
-                        // Match detected circles to pos_nrs from the measurement plan
                         const posNrs = [...new Set((filteredPositions.length > 0 ? filteredPositions : allPositions).map(p => p.pos_nr))];
-                        assignDetectedToPositions(labeled, posNrs);
+                        assignDetectedToPositions(detected, posNrs);
 
                         renderMarkers();
                         saveMarkers();
@@ -1243,192 +1239,138 @@
         }
 
         function detectRedCircles() {
-            // Draw image to canvas for pixel analysis
-            const canvas = document.createElement("canvas");
-            const ctx = canvas.getContext("2d");
             const img = drawingImg;
-            canvas.width = img.naturalWidth;
-            canvas.height = img.naturalHeight;
-            ctx.drawImage(img, 0, 0);
+            const natW = img.naturalWidth;
+            const natH = img.naturalHeight;
 
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            // Downscale to max 1500px on longest side to avoid memory issues
+            const MAX_DIM = 1500;
+            let w, h;
+            if (Math.max(natW, natH) > MAX_DIM) {
+                const scale = MAX_DIM / Math.max(natW, natH);
+                w = Math.round(natW * scale);
+                h = Math.round(natH * scale);
+            } else {
+                w = natW;
+                h = natH;
+            }
+
+            const canvas = document.createElement("canvas");
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, w, h);
+
+            const imageData = ctx.getImageData(0, 0, w, h);
             const data = imageData.data;
-            const w = canvas.width;
-            const h = canvas.height;
+            const totalPixels = w * h;
 
-            // Step 1: Create binary mask of red pixels
-            // Red circles on technical drawings: high R, low G, low B
-            const mask = new Uint8Array(w * h);
-            for (let i = 0; i < data.length; i += 4) {
-                const r = data[i], g = data[i+1], b = data[i+2];
-                // Detect red: R dominant, G and B low
-                if (r > 160 && g < 100 && b < 100 && r > g * 1.8 && r > b * 1.8) {
-                    mask[i / 4] = 1;
+            // Step 1: Binary mask of red pixels
+            const mask = new Uint8Array(totalPixels);
+            for (let i = 0; i < totalPixels; i++) {
+                const off = i * 4;
+                const r = data[off], g = data[off + 1], b = data[off + 2];
+                if (r > 150 && g < 110 && b < 110 && r > g * 1.6 && r > b * 1.6) {
+                    mask[i] = 1;
                 }
             }
 
-            // Step 2: Connected components (flood fill) to find clusters
-            const visited = new Uint8Array(w * h);
+            // Step 2: Connected components with efficient BFS (index pointer, no shift())
+            const labels = new Int32Array(totalPixels); // 0 = unvisited
             const clusters = [];
+            let labelId = 0;
 
             for (let y = 0; y < h; y++) {
                 for (let x = 0; x < w; x++) {
                     const idx = y * w + x;
-                    if (mask[idx] && !visited[idx]) {
-                        // BFS flood fill
-                        const queue = [idx];
-                        visited[idx] = 1;
-                        let sumX = 0, sumY = 0, count = 0;
-                        let minX = x, maxX = x, minY = y, maxY = y;
+                    if (!mask[idx] || labels[idx]) continue;
 
-                        while (queue.length > 0) {
-                            const ci = queue.shift();
-                            const cx = ci % w;
-                            const cy = (ci - cx) / w;
-                            sumX += cx;
-                            sumY += cy;
-                            count++;
-                            minX = Math.min(minX, cx);
-                            maxX = Math.max(maxX, cx);
-                            minY = Math.min(minY, cy);
-                            maxY = Math.max(maxY, cy);
+                    labelId++;
+                    const queue = new Int32Array(Math.min(totalPixels, 50000));
+                    let qHead = 0, qTail = 0;
+                    queue[qTail++] = idx;
+                    labels[idx] = labelId;
+                    let sumX = 0, sumY = 0, count = 0;
+                    let minX = x, maxX = x, minY = y, maxY = y;
 
-                            // 4-connected neighbors
-                            for (const [dx, dy] of [[-1,0],[1,0],[0,-1],[0,1]]) {
-                                const nx = cx + dx, ny = cy + dy;
-                                if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
-                                    const ni = ny * w + nx;
-                                    if (mask[ni] && !visited[ni]) {
-                                        visited[ni] = 1;
-                                        queue.push(ni);
-                                    }
-                                }
-                            }
-                        }
+                    while (qHead < qTail) {
+                        const ci = queue[qHead++];
+                        const cx = ci % w;
+                        const cy = (ci - cx) / w;
+                        sumX += cx; sumY += cy; count++;
+                        if (cx < minX) minX = cx;
+                        if (cx > maxX) maxX = cx;
+                        if (cy < minY) minY = cy;
+                        if (cy > maxY) maxY = cy;
 
-                        clusters.push({ sumX, sumY, count, minX, maxX, minY, maxY });
+                        // 4-connected neighbors (inlined for speed)
+                        if (cx > 0 && mask[ci - 1] && !labels[ci - 1]) { labels[ci - 1] = labelId; queue[qTail++] = ci - 1; }
+                        if (cx < w - 1 && mask[ci + 1] && !labels[ci + 1]) { labels[ci + 1] = labelId; queue[qTail++] = ci + 1; }
+                        if (cy > 0 && mask[ci - w] && !labels[ci - w]) { labels[ci - w] = labelId; queue[qTail++] = ci - w; }
+                        if (cy < h - 1 && mask[ci + w] && !labels[ci + w]) { labels[ci + w] = labelId; queue[qTail++] = ci + w; }
                     }
+
+                    clusters.push({ sumX, sumY, count, minX, maxX, minY, maxY });
                 }
             }
 
-            // Step 3: Filter clusters by size and shape (circles are roughly square aspect ratio)
-            // Typical red circle markers are medium-sized blobs
-            const imgArea = w * h;
-            const minSize = Math.max(10, imgArea * 0.000005); // very small threshold
-            const maxSize = imgArea * 0.005; // not too large
+            // Step 3: Filter by size and shape
+            const minSize = Math.max(8, totalPixels * 0.000008);
+            const maxSize = totalPixels * 0.004;
 
             const circles = clusters.filter(c => {
                 if (c.count < minSize || c.count > maxSize) return false;
                 const bw = c.maxX - c.minX + 1;
                 const bh = c.maxY - c.minY + 1;
-                const aspect = Math.max(bw, bh) / Math.max(1, Math.min(bw, bh));
-                // Circle should be roughly square bounding box (aspect < 3)
-                // and not too elongated (line-like)
-                if (aspect > 3.5) return false;
-                // Minimum bounding box dimension
-                if (bw < 5 || bh < 5) return false;
-                return true;
+                if (bw < 4 || bh < 4) return false;
+                const aspect = Math.max(bw, bh) / Math.min(bw, bh);
+                return aspect < 3.5;
             });
 
             // Step 4: Merge nearby clusters (parts of same circle ring)
-            const merged = mergeNearbyClusters(circles, w, h);
+            const mergeR = Math.max(w, h) * 0.025;
+            const mergeR2 = mergeR * mergeR;
+            const used = new Uint8Array(circles.length);
+            const merged = [];
 
+            for (let i = 0; i < circles.length; i++) {
+                if (used[i]) continue;
+                const m = { ...circles[i] };
+                used[i] = 1;
+                for (let j = i + 1; j < circles.length; j++) {
+                    if (used[j]) continue;
+                    const dx = m.sumX / m.count - circles[j].sumX / circles[j].count;
+                    const dy = m.sumY / m.count - circles[j].sumY / circles[j].count;
+                    if (dx * dx + dy * dy < mergeR2) {
+                        m.sumX += circles[j].sumX; m.sumY += circles[j].sumY;
+                        m.count += circles[j].count;
+                        m.minX = Math.min(m.minX, circles[j].minX);
+                        m.maxX = Math.max(m.maxX, circles[j].maxX);
+                        m.minY = Math.min(m.minY, circles[j].minY);
+                        m.maxY = Math.max(m.maxY, circles[j].maxY);
+                        used[j] = 1;
+                    }
+                }
+                merged.push(m);
+            }
+
+            // Convert to relative coordinates (0-1)
             return merged.map(c => ({
-                x: (c.sumX / c.count) / w,  // relative coords 0-1
-                y: (c.sumY / c.count) / h,
-                cx: c.sumX / c.count,        // absolute coords for OCR
-                cy: c.sumY / c.count,
-                radius: Math.max(c.maxX - c.minX, c.maxY - c.minY) / 2,
-                minX: c.minX, maxX: c.maxX, minY: c.minY, maxY: c.maxY,
-                count: c.count
+                x: (c.sumX / c.count) / w,
+                y: (c.sumY / c.count) / h
             }));
         }
 
-        function mergeNearbyClusters(clusters, imgW, imgH) {
-            // Merge clusters whose centers are very close (parts of the same circle outline)
-            const mergeRadius = Math.max(imgW, imgH) * 0.02; // 2% of image dimension
-            const used = new Array(clusters.length).fill(false);
-            const result = [];
-
-            for (let i = 0; i < clusters.length; i++) {
-                if (used[i]) continue;
-                let merged = { ...clusters[i] };
-                used[i] = true;
-
-                for (let j = i + 1; j < clusters.length; j++) {
-                    if (used[j]) continue;
-                    const cx1 = merged.sumX / merged.count;
-                    const cy1 = merged.sumY / merged.count;
-                    const cx2 = clusters[j].sumX / clusters[j].count;
-                    const cy2 = clusters[j].sumY / clusters[j].count;
-                    const dist = Math.sqrt((cx1 - cx2) ** 2 + (cy1 - cy2) ** 2);
-
-                    if (dist < mergeRadius) {
-                        merged.sumX += clusters[j].sumX;
-                        merged.sumY += clusters[j].sumY;
-                        merged.count += clusters[j].count;
-                        merged.minX = Math.min(merged.minX, clusters[j].minX);
-                        merged.maxX = Math.max(merged.maxX, clusters[j].maxX);
-                        merged.minY = Math.min(merged.minY, clusters[j].minY);
-                        merged.maxY = Math.max(merged.maxY, clusters[j].maxY);
-                        used[j] = true;
-                    }
-                }
-                result.push(merged);
-            }
-            return result;
-        }
-
-        function readCircleNumbers(circles) {
-            // Try to read the number inside each red circle using pixel analysis
-            // We look at the interior of the circle (dark pixels = text on light background)
-            const canvas = document.createElement("canvas");
-            const ctx = canvas.getContext("2d");
-            const img = drawingImg;
-            canvas.width = img.naturalWidth;
-            canvas.height = img.naturalHeight;
-            ctx.drawImage(img, 0, 0);
-
-            return circles.map(circle => {
-                // The number is inside the red circle ring
-                // Crop a region around the circle center
-                const r = Math.max(circle.radius * 0.7, 8);
-                const cx = Math.round(circle.cx);
-                const cy = Math.round(circle.cy);
-                const x0 = Math.max(0, Math.round(cx - r));
-                const y0 = Math.max(0, Math.round(cy - r));
-                const x1 = Math.min(canvas.width - 1, Math.round(cx + r));
-                const y1 = Math.min(canvas.height - 1, Math.round(cy + r));
-
-                // Count dark pixels in the interior (the number text)
-                const cropData = ctx.getImageData(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
-                let darkPixels = 0;
-                const cd = cropData.data;
-                for (let i = 0; i < cd.length; i += 4) {
-                    const brightness = (cd[i] + cd[i+1] + cd[i+2]) / 3;
-                    if (brightness < 80) darkPixels++;
-                }
-
-                // Return circle with estimated label (will be matched later)
-                return { ...circle, darkPixels, label: null };
-            });
-        }
-
         function assignDetectedToPositions(detected, posNrs) {
-            // Sort detected circles in reading order (top-to-bottom, left-to-right)
-            // Group into rows first (similar Y coordinates)
             detected.sort((a, b) => a.y - b.y);
 
-            // If we have pos_nrs as numbers, sort them numerically
             const numericPosNrs = posNrs.map(p => ({ nr: p, num: parseFloat(p.replace(",", ".")) }));
             numericPosNrs.sort((a, b) => a.num - b.num);
 
-            // Simple assignment: sort all detected markers in a reading order
-            // (row by row, left to right within each row)
-            const rowThreshold = 0.03; // 3% of image height = same row
+            // Group into rows (similar Y), then sort left-to-right
+            const rowThreshold = 0.03;
             const rows = [];
             let currentRow = [detected[0]];
-
             for (let i = 1; i < detected.length; i++) {
                 if (detected[i].y - currentRow[0].y < rowThreshold) {
                     currentRow.push(detected[i]);
@@ -1438,34 +1380,21 @@
                 }
             }
             rows.push(currentRow);
-
-            // Sort each row by X
             rows.forEach(row => row.sort((a, b) => a.x - b.x));
-
-            // Flatten back to reading order
             const ordered = rows.flat();
 
-            // Now try to match: if same number of detected circles as pos_nrs,
-            // just assign 1:1 in order. Otherwise do best effort.
-            // For each detected circle, assign the nearest pos_nr by index
             drawingMarkers = {};
-
             if (ordered.length === numericPosNrs.length) {
-                // Perfect match - assign 1:1
                 for (let i = 0; i < ordered.length; i++) {
                     drawingMarkers[numericPosNrs[i].nr] = { x: ordered[i].x, y: ordered[i].y };
                 }
             } else {
-                // Different counts - assign what we can, use detected index as label
-                // First try to match by count: assign numerically
                 for (let i = 0; i < ordered.length; i++) {
-                    // Use the detected circle index + 1 as pos number if it matches a known pos_nr
                     const guessNr = String(i + 1);
-                    const matchingPos = numericPosNrs.find(p => p.nr === guessNr);
-                    if (matchingPos) {
-                        drawingMarkers[matchingPos.nr] = { x: ordered[i].x, y: ordered[i].y };
+                    const match = numericPosNrs.find(p => p.nr === guessNr);
+                    if (match) {
+                        drawingMarkers[match.nr] = { x: ordered[i].x, y: ordered[i].y };
                     } else {
-                        // Assign with a generic label
                         drawingMarkers["#" + (i + 1)] = { x: ordered[i].x, y: ordered[i].y };
                     }
                 }
