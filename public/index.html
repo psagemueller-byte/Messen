@@ -387,14 +387,126 @@
         }
         .sound-toggle label { cursor: pointer; font-size: 0.95rem; }
 
+        /* Drawing viewer */
+        .drawing-section {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            display: none;
+        }
+        .drawing-section.visible { display: block; }
+        .drawing-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .drawing-header h3 { margin: 0; font-size: 1.05rem; }
+        .drawing-toolbar {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .drawing-toolbar .calib-btn {
+            padding: 6px 14px;
+            border: 2px solid var(--primary);
+            border-radius: 6px;
+            background: white;
+            color: var(--primary);
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .drawing-toolbar .calib-btn.active {
+            background: var(--danger);
+            color: white;
+            border-color: var(--danger);
+        }
+        .drawing-toolbar select, .drawing-toolbar input {
+            padding: 6px 10px;
+            border: 2px solid var(--border);
+            border-radius: 6px;
+            font-size: 0.85rem;
+        }
+        .drawing-viewer {
+            position: relative;
+            overflow: auto;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            background: #fafafa;
+            cursor: default;
+            max-height: 60vh;
+        }
+        .drawing-viewer.calibrating { cursor: crosshair; }
+        .drawing-viewer img {
+            display: block;
+            width: 100%;
+            height: auto;
+            user-select: none;
+            -webkit-user-drag: none;
+        }
+        .drawing-marker {
+            position: absolute;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: 3px solid var(--primary);
+            background: rgba(0,102,204,0.15);
+            transform: translate(-50%, -50%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--primary);
+            pointer-events: none;
+            z-index: 2;
+            transition: all 0.2s;
+        }
+        .drawing-marker.highlight {
+            width: 40px;
+            height: 40px;
+            border: 4px solid var(--danger);
+            background: rgba(220,53,69,0.25);
+            color: var(--danger);
+            font-size: 0.85rem;
+            z-index: 10;
+            animation: marker-pulse 1s infinite;
+        }
+        @keyframes marker-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(220,53,69,0.5); }
+            50% { box-shadow: 0 0 0 12px rgba(220,53,69,0); }
+        }
+        .drawing-upload-area {
+            border: 2px dashed var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.95rem;
+            color: #666;
+        }
+        .drawing-upload-area:hover { border-color: var(--primary); background: #e8f0fe; }
+
+        /* Make due-table rows clickable */
+        .due-table tbody tr:not(.group-header) { cursor: pointer; transition: background 0.15s; }
+        .due-table tbody tr:not(.group-header):hover { background: #e8f0fe; }
+        .due-table tbody tr.selected-row { background: #fff3cd; }
+
         /* Responsive */
         @media (max-width: 768px) {
             .header h1 { font-size: 1.2rem; }
             .part-counter .count { font-size: 3rem; min-width: 100px; }
             .counter-btn { width: 60px; height: 60px; font-size: 2rem; }
-            .measurement-card { grid-template-columns: 60px 1fr; }
-            .measurement-card .pos-nr { font-size: 1.4rem; }
             .signal-banner h2 { font-size: 1.5rem; }
+            .drawing-marker { width: 22px; height: 22px; font-size: 0.6rem; }
+            .drawing-marker.highlight { width: 32px; height: 32px; font-size: 0.75rem; }
         }
 
         /* Manual entry form */
@@ -515,6 +627,25 @@
             </div>
 
             <div class="next-measurement-info" id="nextMeasurementInfo"></div>
+        </div>
+
+        <!-- Drawing Section -->
+        <div class="drawing-section" id="drawingSection">
+            <div class="drawing-header">
+                <h3>Messpunktzeichnung</h3>
+                <div class="drawing-toolbar" id="drawingToolbar" style="display:none">
+                    <select id="calibPosSelect"></select>
+                    <button class="calib-btn" id="calibBtn" onclick="toggleCalibration()">Punkte setzen</button>
+                    <button class="calib-btn" onclick="clearAllMarkers()" style="border-color:#dc3545;color:#dc3545">Alle löschen</button>
+                </div>
+            </div>
+            <div id="drawingUploadArea" class="drawing-upload-area" onclick="document.getElementById('drawingInput').click()">
+                Zeichnung hier ablegen oder klicken (Bild: PNG/JPG)
+            </div>
+            <input type="file" id="drawingInput" accept="image/*" style="display:none">
+            <div class="drawing-viewer" id="drawingViewer" style="display:none">
+                <img id="drawingImg" src="" alt="Messpunktzeichnung">
+            </div>
         </div>
 
         <!-- Signal Area -->
@@ -686,6 +817,7 @@
             document.getElementById("counterSection").classList.add("visible");
             document.getElementById("signalArea").classList.add("visible");
             document.getElementById("allPositionsSection").classList.add("visible");
+            document.getElementById("drawingSection").classList.add("visible");
             renderAllPositionsTable();
             updateMeasurements();
         }
@@ -933,7 +1065,7 @@
                 for (const [messmittel, items] of Object.entries(groups)) {
                     html += `<tr class="group-header"><td colspan="4">${messmittel}</td></tr>`;
                     for (const pos of items) {
-                        html += `<tr>
+                        html += `<tr onclick="highlightDrawingPos('${pos.pos_nr}')" data-pos="${pos.pos_nr}">
                             <td class="pos-cell">${pos.pos_nr}</td>
                             <td class="merkmal-cell">${pos.pruefmerkmal}</td>
                             <td class="tol-cell">${pos.ut}</td>
@@ -993,7 +1125,7 @@
                 </thead>
                 <tbody>`;
             for (const pos of filteredPositions) {
-                html += `<tr data-pos="${pos.pos_nr}">
+                html += `<tr data-pos="${pos.pos_nr}" onclick="highlightDrawingPos('${pos.pos_nr}')" style="cursor:pointer">
                     <td>${pos.pos_nr}</td>
                     <td><strong>${pos.pruefmerkmal}</strong></td>
                     <td>${pos.ut}</td>
@@ -1017,6 +1149,141 @@
                     row.classList.remove("highlight");
                 }
             });
+        }
+
+        // --- Drawing / Calibration ---
+        let drawingMarkers = {}; // { "pos_nr": { x: 0-1, y: 0-1 } } relative coords
+        let calibrationMode = false;
+        let selectedHighlight = null;
+
+        // Drawing upload
+        const drawingUploadArea = document.getElementById("drawingUploadArea");
+        const drawingInput = document.getElementById("drawingInput");
+        const drawingViewer = document.getElementById("drawingViewer");
+        const drawingImg = document.getElementById("drawingImg");
+
+        drawingUploadArea.addEventListener("dragover", (e) => { e.preventDefault(); drawingUploadArea.style.borderColor = "var(--primary)"; });
+        drawingUploadArea.addEventListener("dragleave", () => { drawingUploadArea.style.borderColor = ""; });
+        drawingUploadArea.addEventListener("drop", (e) => {
+            e.preventDefault();
+            drawingUploadArea.style.borderColor = "";
+            if (e.dataTransfer.files.length > 0) loadDrawing(e.dataTransfer.files[0]);
+        });
+        drawingInput.addEventListener("change", () => {
+            if (drawingInput.files.length > 0) loadDrawing(drawingInput.files[0]);
+        });
+
+        function loadDrawing(file) {
+            if (!file.type.startsWith("image/")) {
+                alert("Bitte ein Bild hochladen (PNG, JPG, etc.).");
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                drawingImg.src = e.target.result;
+                drawingUploadArea.style.display = "none";
+                drawingViewer.style.display = "block";
+                document.getElementById("drawingToolbar").style.display = "flex";
+                updateCalibPosSelect();
+                // Try to restore markers from localStorage
+                restoreMarkers();
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function updateCalibPosSelect() {
+            const sel = document.getElementById("calibPosSelect");
+            const positions = filteredPositions.length > 0 ? filteredPositions : allPositions;
+            const posNrs = [...new Set(positions.map(p => p.pos_nr))];
+            sel.innerHTML = posNrs.map(p => `<option value="${p}">Pos ${p}</option>`).join("");
+        }
+
+        function toggleCalibration() {
+            calibrationMode = !calibrationMode;
+            const btn = document.getElementById("calibBtn");
+            if (calibrationMode) {
+                btn.textContent = "Fertig";
+                btn.classList.add("active");
+                drawingViewer.classList.add("calibrating");
+            } else {
+                btn.textContent = "Punkte setzen";
+                btn.classList.remove("active");
+                drawingViewer.classList.remove("calibrating");
+                saveMarkers();
+            }
+        }
+
+        drawingViewer.addEventListener("click", (e) => {
+            if (!calibrationMode) return;
+            const rect = drawingImg.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / rect.width;
+            const y = (e.clientY - rect.top) / rect.height;
+            if (x < 0 || x > 1 || y < 0 || y > 1) return;
+
+            const posNr = document.getElementById("calibPosSelect").value;
+            drawingMarkers[posNr] = { x, y };
+            renderMarkers();
+
+            // Auto-advance to next pos in select
+            const sel = document.getElementById("calibPosSelect");
+            if (sel.selectedIndex < sel.options.length - 1) {
+                sel.selectedIndex++;
+            }
+            saveMarkers();
+        });
+
+        function renderMarkers() {
+            // Remove existing markers
+            drawingViewer.querySelectorAll(".drawing-marker").forEach(m => m.remove());
+            for (const [posNr, coords] of Object.entries(drawingMarkers)) {
+                const marker = document.createElement("div");
+                marker.className = "drawing-marker";
+                if (selectedHighlight === posNr) marker.classList.add("highlight");
+                marker.dataset.pos = posNr;
+                marker.textContent = posNr;
+                marker.style.left = (coords.x * 100) + "%";
+                marker.style.top = (coords.y * 100) + "%";
+                drawingViewer.appendChild(marker);
+            }
+        }
+
+        function highlightDrawingPos(posNr) {
+            selectedHighlight = (selectedHighlight === posNr) ? null : posNr;
+            renderMarkers();
+            // Highlight selected row in tables
+            document.querySelectorAll(".due-table tr, #allPositionsTable tr").forEach(row => {
+                row.classList.toggle("selected-row", row.dataset.pos === selectedHighlight);
+            });
+            // Scroll drawing into view if highlight active
+            if (selectedHighlight && drawingMarkers[posNr]) {
+                document.getElementById("drawingSection").scrollIntoView({ behavior: "smooth", block: "nearest" });
+            }
+        }
+
+        function clearAllMarkers() {
+            if (!confirm("Alle Markierungen löschen?")) return;
+            drawingMarkers = {};
+            selectedHighlight = null;
+            renderMarkers();
+            saveMarkers();
+        }
+
+        function saveMarkers() {
+            try {
+                const key = "drawingMarkers_" + (headerInfo.zeichnungs_nr || headerInfo.artikel_nr || "default");
+                localStorage.setItem(key, JSON.stringify(drawingMarkers));
+            } catch(e) {}
+        }
+
+        function restoreMarkers() {
+            try {
+                const key = "drawingMarkers_" + (headerInfo.zeichnungs_nr || headerInfo.artikel_nr || "default");
+                const stored = localStorage.getItem(key);
+                if (stored) {
+                    drawingMarkers = JSON.parse(stored);
+                    renderMarkers();
+                }
+            } catch(e) {}
         }
 
         // --- Keyboard shortcuts ---
