@@ -8,10 +8,13 @@ welche Maße wann und wie zu messen sind.
 import os
 import re
 import json
+import math
+import base64
 import tempfile
 from flask import Flask, request, jsonify
 from werkzeug.utils import secure_filename
 import pdfplumber
+import fitz  # PyMuPDF
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB
@@ -228,3 +231,169 @@ def check_measurements():
             due.append(pos)
 
     return jsonify({"part_count": part_count, "due_measurements": due})
+
+
+@app.route("/api/upload-drawing", methods=["POST"])
+def upload_drawing():
+    """Upload a technical drawing PDF. Extracts red circle markers with position
+    numbers and renders page 1 as a PNG image for display.
+
+    Returns JSON:
+        image: base64-encoded PNG of page 1
+        markers: [ { pos_nr: "1", x: 0.12, y: 0.34 }, ... ]
+    """
+    if "file" not in request.files:
+        return jsonify({"error": "Keine Datei hochgeladen"}), 400
+    file = request.files["file"]
+    if not file.filename.lower().endswith(".pdf"):
+        return jsonify({"error": "Nur PDF-Dateien werden unterstützt"}), 400
+
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        file.save(tmp.name)
+        try:
+            result = extract_drawing_markers(tmp.name)
+            return jsonify(result)
+        except Exception as e:
+            return jsonify({"error": f"Fehler: {str(e)}"}), 500
+        finally:
+            os.unlink(tmp.name)
+
+
+def extract_drawing_markers(filepath):
+    """Extract red circle markers and their labels from a technical drawing PDF.
+
+    Strategy:
+    1. Use PyMuPDF to get all drawing paths on page 1
+    2. Find paths that are red circles/ellipses (small, roughly square bbox)
+    3. Extract all text blocks with positions
+    4. Match each red circle to the nearest text (the position number)
+    5. Render page as PNG for frontend display
+    """
+    doc = fitz.open(filepath)
+    page = doc[0]
+    pw = page.rect.width
+    ph = page.rect.height
+
+    # --- Step 1: Find red circles ---
+    red_circles = []
+
+    for drawing in page.get_drawings():
+        # Check if the path contains red color (stroke or fill)
+        stroke_color = drawing.get("color")
+        fill_color = drawing.get("fill")
+
+        is_red_stroke = is_red(stroke_color)
+        is_red_fill = is_red(fill_color)
+
+        if not is_red_stroke and not is_red_fill:
+            continue
+
+        # Get bounding rect of this drawing
+        rect = drawing.get("rect")
+        if not rect:
+            continue
+        r = fitz.Rect(rect)
+        bw = r.width
+        bh = r.height
+
+        # Filter: circle markers are small and roughly square
+        # Typical marker: 5-25 pt diameter on A3/A4 drawing
+        if bw < 2 or bh < 2:
+            continue
+        if bw > pw * 0.08 or bh > ph * 0.08:
+            continue  # too large
+        aspect = max(bw, bh) / max(min(bw, bh), 0.1)
+        if aspect > 2.5:
+            continue  # not circle-like
+
+        # Check if path contains curves (circles use 'c' items = bezier curves)
+        items = drawing.get("items", [])
+        has_curves = any(item[0] == "c" for item in items)
+        if not has_curves:
+            continue  # circles are made of bezier curves, not lines
+
+        cx = (r.x0 + r.x1) / 2
+        cy = (r.y0 + r.y1) / 2
+        radius = max(bw, bh) / 2
+
+        red_circles.append({
+            "cx": cx, "cy": cy,
+            "radius": radius,
+            "x": cx / pw,  # relative 0-1
+            "y": cy / ph,
+        })
+
+    # --- Step 2: Extract all text with positions ---
+    text_blocks = []
+    text_dict = page.get_text("dict")
+    for block in text_dict.get("blocks", []):
+        if block.get("type") != 0:  # text block
+            continue
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                text = span.get("text", "").strip()
+                if not text:
+                    continue
+                bbox = span.get("bbox", [0, 0, 0, 0])
+                tcx = (bbox[0] + bbox[2]) / 2
+                tcy = (bbox[1] + bbox[3]) / 2
+                text_blocks.append({"text": text, "cx": tcx, "cy": tcy})
+
+    # --- Step 3: Match circles to nearest number text ---
+    markers = []
+    used_texts = set()
+
+    for circle in red_circles:
+        best_text = None
+        best_dist = float("inf")
+        search_radius = circle["radius"] * 3  # look within 3x radius
+
+        for i, tb in enumerate(text_blocks):
+            if i in used_texts:
+                continue
+            # Check if text looks like a position number
+            clean = tb["text"].replace(".", "").replace(",", "").strip()
+            if not re.match(r"^\d+$", clean):
+                continue
+            dist = math.sqrt((circle["cx"] - tb["cx"]) ** 2 +
+                             (circle["cy"] - tb["cy"]) ** 2)
+            if dist < search_radius and dist < best_dist:
+                best_dist = dist
+                best_text = (i, clean)
+
+        if best_text:
+            used_texts.add(best_text[0])
+            markers.append({
+                "pos_nr": best_text[1],
+                "x": circle["x"],
+                "y": circle["y"],
+            })
+
+    # --- Step 4: Render page as PNG ---
+    # Render at 150 DPI for good quality without being too large
+    mat = fitz.Matrix(150 / 72, 150 / 72)
+    pix = page.get_pixmap(matrix=mat)
+    png_bytes = pix.tobytes("png")
+    image_b64 = base64.b64encode(png_bytes).decode("ascii")
+
+    doc.close()
+
+    return {
+        "image": f"data:image/png;base64,{image_b64}",
+        "markers": markers,
+        "page_width": pw,
+        "page_height": ph,
+        "detected_circles": len(red_circles),
+        "matched_markers": len(markers),
+    }
+
+
+def is_red(color):
+    """Check if a color tuple represents red."""
+    if not color or not isinstance(color, (list, tuple)):
+        return False
+    if len(color) < 3:
+        return False
+    r, g, b = color[0], color[1], color[2]
+    # Red: high R, low G, low B
+    return r > 0.6 and g < 0.35 and b < 0.35

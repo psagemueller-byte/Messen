@@ -634,16 +634,16 @@
             <div class="drawing-header">
                 <h3>Messpunktzeichnung</h3>
                 <div class="drawing-toolbar" id="drawingToolbar" style="display:none">
-                    <button class="calib-btn" id="autoDetectBtn" onclick="autoDetectMarkers()" style="background:var(--success);color:white;border-color:var(--success)">Auto-Erkennung</button>
+                    <span id="drawingStatus" style="font-size:0.85rem;color:#666"></span>
                     <select id="calibPosSelect"></select>
-                    <button class="calib-btn" id="calibBtn" onclick="toggleCalibration()">Manuell setzen</button>
+                    <button class="calib-btn" id="calibBtn" onclick="toggleCalibration()">Manuell korrigieren</button>
                     <button class="calib-btn" onclick="clearAllMarkers()" style="border-color:#dc3545;color:#dc3545">Alle löschen</button>
                 </div>
             </div>
             <div id="drawingUploadArea" class="drawing-upload-area" onclick="document.getElementById('drawingInput').click()">
-                Zeichnung hier ablegen oder klicken (Bild: PNG/JPG)
+                Zeichnungs-PDF hier ablegen oder klicken
             </div>
-            <input type="file" id="drawingInput" accept="image/*" style="display:none">
+            <input type="file" id="drawingInput" accept=".pdf,image/*" style="display:none">
             <div class="drawing-viewer" id="drawingViewer" style="display:none">
                 <img id="drawingImg" src="" alt="Messpunktzeichnung">
             </div>
@@ -1157,7 +1157,6 @@
         let calibrationMode = false;
         let selectedHighlight = null;
 
-        // Drawing upload
         const drawingUploadArea = document.getElementById("drawingUploadArea");
         const drawingInput = document.getElementById("drawingInput");
         const drawingViewer = document.getElementById("drawingViewer");
@@ -1175,22 +1174,74 @@
         });
 
         function loadDrawing(file) {
-            if (!file.type.startsWith("image/")) {
-                alert("Bitte ein Bild hochladen (PNG, JPG, etc.).");
+            const isPDF = file.name.toLowerCase().endsWith(".pdf");
+            const isImage = file.type.startsWith("image/");
+
+            if (!isPDF && !isImage) {
+                alert("Bitte PDF oder Bild hochladen.");
                 return;
             }
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                drawingImg.src = e.target.result;
-                drawingImg.onload = () => {
-                    drawingUploadArea.style.display = "none";
-                    drawingViewer.style.display = "block";
-                    document.getElementById("drawingToolbar").style.display = "flex";
-                    updateCalibPosSelect();
-                    restoreMarkers();
+
+            if (isPDF) {
+                // Upload to server for vector-based extraction
+                drawingUploadArea.innerHTML = '<p>Wird analysiert...</p>';
+                const formData = new FormData();
+                formData.append("file", file);
+
+                fetch("/api/upload-drawing", { method: "POST", body: formData })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.error) {
+                            alert(data.error);
+                            drawingUploadArea.innerHTML = 'Zeichnungs-PDF hier ablegen oder klicken';
+                            return;
+                        }
+                        // Set rendered PNG as image
+                        drawingImg.src = data.image;
+                        drawingImg.onload = () => {
+                            drawingUploadArea.style.display = "none";
+                            drawingViewer.style.display = "block";
+                            document.getElementById("drawingToolbar").style.display = "flex";
+                            updateCalibPosSelect();
+
+                            // Apply server-detected markers
+                            if (data.markers && data.markers.length > 0) {
+                                drawingMarkers = {};
+                                for (const m of data.markers) {
+                                    drawingMarkers[m.pos_nr] = { x: m.x, y: m.y };
+                                }
+                                renderMarkers();
+                                saveMarkers();
+                                document.getElementById("drawingStatus").textContent =
+                                    `${data.matched_markers}/${data.detected_circles} Messpunkte erkannt`;
+                            } else {
+                                restoreMarkers();
+                                document.getElementById("drawingStatus").textContent =
+                                    "Keine Messpunkte erkannt – bitte manuell setzen";
+                            }
+                        };
+                    })
+                    .catch(err => {
+                        alert("Fehler: " + err.message);
+                        drawingUploadArea.innerHTML = 'Zeichnungs-PDF hier ablegen oder klicken';
+                    });
+            } else {
+                // Image: just display, no auto-detection
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    drawingImg.src = e.target.result;
+                    drawingImg.onload = () => {
+                        drawingUploadArea.style.display = "none";
+                        drawingViewer.style.display = "block";
+                        document.getElementById("drawingToolbar").style.display = "flex";
+                        updateCalibPosSelect();
+                        restoreMarkers();
+                        document.getElementById("drawingStatus").textContent =
+                            "Bild geladen – Punkte manuell setzen";
+                    };
                 };
-            };
-            reader.readAsDataURL(file);
+                reader.readAsDataURL(file);
+            }
         }
 
         function updateCalibPosSelect() {
@@ -1198,207 +1249,6 @@
             const positions = filteredPositions.length > 0 ? filteredPositions : allPositions;
             const posNrs = [...new Set(positions.map(p => p.pos_nr))];
             sel.innerHTML = posNrs.map(p => `<option value="${p}">Pos ${p}</option>`).join("");
-        }
-
-        // --- Auto-Detection of red circle markers ---
-        // Optimized: downscales image to max 1500px, uses efficient BFS with index pointer
-        function autoDetectMarkers() {
-            const btn = document.getElementById("autoDetectBtn");
-            btn.textContent = "Erkennung läuft...";
-            btn.disabled = true;
-
-            requestAnimationFrame(() => {
-                setTimeout(() => {
-                    try {
-                        const detected = detectRedCircles();
-                        if (detected.length === 0) {
-                            alert("Keine roten Messpunkte erkannt. Bitte manuell setzen.");
-                            btn.textContent = "Auto-Erkennung";
-                            btn.disabled = false;
-                            return;
-                        }
-
-                        const posNrs = [...new Set((filteredPositions.length > 0 ? filteredPositions : allPositions).map(p => p.pos_nr))];
-                        assignDetectedToPositions(detected, posNrs);
-
-                        renderMarkers();
-                        saveMarkers();
-
-                        const matched = Object.keys(drawingMarkers).length;
-                        btn.textContent = `${matched} erkannt`;
-                        btn.disabled = false;
-                        setTimeout(() => { btn.textContent = "Auto-Erkennung"; }, 3000);
-                    } catch (err) {
-                        console.error("Auto-detection error:", err);
-                        alert("Fehler bei der Erkennung: " + err.message);
-                        btn.textContent = "Auto-Erkennung";
-                        btn.disabled = false;
-                    }
-                }, 50);
-            });
-        }
-
-        function detectRedCircles() {
-            const img = drawingImg;
-            const natW = img.naturalWidth;
-            const natH = img.naturalHeight;
-
-            // Downscale to max 1500px on longest side to avoid memory issues
-            const MAX_DIM = 1500;
-            let w, h;
-            if (Math.max(natW, natH) > MAX_DIM) {
-                const scale = MAX_DIM / Math.max(natW, natH);
-                w = Math.round(natW * scale);
-                h = Math.round(natH * scale);
-            } else {
-                w = natW;
-                h = natH;
-            }
-
-            const canvas = document.createElement("canvas");
-            canvas.width = w;
-            canvas.height = h;
-            const ctx = canvas.getContext("2d");
-            ctx.drawImage(img, 0, 0, w, h);
-
-            const imageData = ctx.getImageData(0, 0, w, h);
-            const data = imageData.data;
-            const totalPixels = w * h;
-
-            // Step 1: Binary mask of red pixels
-            const mask = new Uint8Array(totalPixels);
-            for (let i = 0; i < totalPixels; i++) {
-                const off = i * 4;
-                const r = data[off], g = data[off + 1], b = data[off + 2];
-                if (r > 150 && g < 110 && b < 110 && r > g * 1.6 && r > b * 1.6) {
-                    mask[i] = 1;
-                }
-            }
-
-            // Step 2: Connected components with efficient BFS (index pointer, no shift())
-            const labels = new Int32Array(totalPixels); // 0 = unvisited
-            const clusters = [];
-            let labelId = 0;
-
-            for (let y = 0; y < h; y++) {
-                for (let x = 0; x < w; x++) {
-                    const idx = y * w + x;
-                    if (!mask[idx] || labels[idx]) continue;
-
-                    labelId++;
-                    const queue = new Int32Array(Math.min(totalPixels, 50000));
-                    let qHead = 0, qTail = 0;
-                    queue[qTail++] = idx;
-                    labels[idx] = labelId;
-                    let sumX = 0, sumY = 0, count = 0;
-                    let minX = x, maxX = x, minY = y, maxY = y;
-
-                    while (qHead < qTail) {
-                        const ci = queue[qHead++];
-                        const cx = ci % w;
-                        const cy = (ci - cx) / w;
-                        sumX += cx; sumY += cy; count++;
-                        if (cx < minX) minX = cx;
-                        if (cx > maxX) maxX = cx;
-                        if (cy < minY) minY = cy;
-                        if (cy > maxY) maxY = cy;
-
-                        // 4-connected neighbors (inlined for speed)
-                        if (cx > 0 && mask[ci - 1] && !labels[ci - 1]) { labels[ci - 1] = labelId; queue[qTail++] = ci - 1; }
-                        if (cx < w - 1 && mask[ci + 1] && !labels[ci + 1]) { labels[ci + 1] = labelId; queue[qTail++] = ci + 1; }
-                        if (cy > 0 && mask[ci - w] && !labels[ci - w]) { labels[ci - w] = labelId; queue[qTail++] = ci - w; }
-                        if (cy < h - 1 && mask[ci + w] && !labels[ci + w]) { labels[ci + w] = labelId; queue[qTail++] = ci + w; }
-                    }
-
-                    clusters.push({ sumX, sumY, count, minX, maxX, minY, maxY });
-                }
-            }
-
-            // Step 3: Filter by size and shape
-            const minSize = Math.max(8, totalPixels * 0.000008);
-            const maxSize = totalPixels * 0.004;
-
-            const circles = clusters.filter(c => {
-                if (c.count < minSize || c.count > maxSize) return false;
-                const bw = c.maxX - c.minX + 1;
-                const bh = c.maxY - c.minY + 1;
-                if (bw < 4 || bh < 4) return false;
-                const aspect = Math.max(bw, bh) / Math.min(bw, bh);
-                return aspect < 3.5;
-            });
-
-            // Step 4: Merge nearby clusters (parts of same circle ring)
-            const mergeR = Math.max(w, h) * 0.025;
-            const mergeR2 = mergeR * mergeR;
-            const used = new Uint8Array(circles.length);
-            const merged = [];
-
-            for (let i = 0; i < circles.length; i++) {
-                if (used[i]) continue;
-                const m = { ...circles[i] };
-                used[i] = 1;
-                for (let j = i + 1; j < circles.length; j++) {
-                    if (used[j]) continue;
-                    const dx = m.sumX / m.count - circles[j].sumX / circles[j].count;
-                    const dy = m.sumY / m.count - circles[j].sumY / circles[j].count;
-                    if (dx * dx + dy * dy < mergeR2) {
-                        m.sumX += circles[j].sumX; m.sumY += circles[j].sumY;
-                        m.count += circles[j].count;
-                        m.minX = Math.min(m.minX, circles[j].minX);
-                        m.maxX = Math.max(m.maxX, circles[j].maxX);
-                        m.minY = Math.min(m.minY, circles[j].minY);
-                        m.maxY = Math.max(m.maxY, circles[j].maxY);
-                        used[j] = 1;
-                    }
-                }
-                merged.push(m);
-            }
-
-            // Convert to relative coordinates (0-1)
-            return merged.map(c => ({
-                x: (c.sumX / c.count) / w,
-                y: (c.sumY / c.count) / h
-            }));
-        }
-
-        function assignDetectedToPositions(detected, posNrs) {
-            detected.sort((a, b) => a.y - b.y);
-
-            const numericPosNrs = posNrs.map(p => ({ nr: p, num: parseFloat(p.replace(",", ".")) }));
-            numericPosNrs.sort((a, b) => a.num - b.num);
-
-            // Group into rows (similar Y), then sort left-to-right
-            const rowThreshold = 0.03;
-            const rows = [];
-            let currentRow = [detected[0]];
-            for (let i = 1; i < detected.length; i++) {
-                if (detected[i].y - currentRow[0].y < rowThreshold) {
-                    currentRow.push(detected[i]);
-                } else {
-                    rows.push(currentRow);
-                    currentRow = [detected[i]];
-                }
-            }
-            rows.push(currentRow);
-            rows.forEach(row => row.sort((a, b) => a.x - b.x));
-            const ordered = rows.flat();
-
-            drawingMarkers = {};
-            if (ordered.length === numericPosNrs.length) {
-                for (let i = 0; i < ordered.length; i++) {
-                    drawingMarkers[numericPosNrs[i].nr] = { x: ordered[i].x, y: ordered[i].y };
-                }
-            } else {
-                for (let i = 0; i < ordered.length; i++) {
-                    const guessNr = String(i + 1);
-                    const match = numericPosNrs.find(p => p.nr === guessNr);
-                    if (match) {
-                        drawingMarkers[match.nr] = { x: ordered[i].x, y: ordered[i].y };
-                    } else {
-                        drawingMarkers["#" + (i + 1)] = { x: ordered[i].x, y: ordered[i].y };
-                    }
-                }
-            }
         }
 
         // --- Manual Calibration ---
@@ -1410,7 +1260,7 @@
                 btn.classList.add("active");
                 drawingViewer.classList.add("calibrating");
             } else {
-                btn.textContent = "Manuell setzen";
+                btn.textContent = "Manuell korrigieren";
                 btn.classList.remove("active");
                 drawingViewer.classList.remove("calibrating");
                 saveMarkers();
@@ -1428,7 +1278,6 @@
             drawingMarkers[posNr] = { x, y };
             renderMarkers();
 
-            // Auto-advance to next pos in select
             const sel = document.getElementById("calibPosSelect");
             if (sel.selectedIndex < sel.options.length - 1) {
                 sel.selectedIndex++;
