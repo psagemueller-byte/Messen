@@ -504,6 +504,151 @@
         }
         .drawing-upload-area:hover { border-color: var(--primary); background: #e8f0fe; }
 
+        /* Review Drawing Overlay */
+        .review-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 1000;
+            padding: 20px;
+        }
+        .review-overlay.active { display: flex; gap: 16px; }
+        .review-sidebar {
+            width: 280px;
+            min-width: 280px;
+            background: white;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .review-sidebar-header {
+            padding: 16px;
+            background: var(--primary);
+            color: white;
+        }
+        .review-sidebar-header h3 { margin-bottom: 4px; font-size: 1rem; }
+        .review-sidebar-header .review-stats { font-size: 0.85rem; opacity: 0.9; }
+        .review-pos-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+        .review-pos-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            border: 2px solid transparent;
+            transition: all 0.15s;
+        }
+        .review-pos-item:hover { background: #f0f4ff; }
+        .review-pos-item.missing { border-color: var(--danger); background: #fff5f5; }
+        .review-pos-item.placed { border-color: var(--success); background: #f0fff4; }
+        .review-pos-item.active-pos { border-color: var(--primary); background: #e8f0fe; box-shadow: 0 0 0 2px rgba(0,102,204,0.3); }
+        .review-pos-dot {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .review-pos-item.missing .review-pos-dot { background: var(--danger); }
+        .review-pos-item.placed .review-pos-dot { background: var(--success); }
+        .review-pos-name { flex: 1; }
+        .review-pos-badge {
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+        .review-pos-item.missing .review-pos-badge { background: #ffe0e0; color: var(--danger); }
+        .review-pos-item.placed .review-pos-badge { background: #d4edda; color: var(--success); }
+        .review-drawing-area {
+            flex: 1;
+            background: white;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .review-drawing-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 16px;
+            border-bottom: 1px solid var(--border);
+            background: #fafafa;
+        }
+        .review-drawing-toolbar .review-title { font-weight: 700; font-size: 0.95rem; }
+        .review-drawing-toolbar .review-hint {
+            flex: 1;
+            text-align: center;
+            font-size: 0.85rem;
+            color: #666;
+        }
+        .review-drawing-toolbar .review-hint strong { color: var(--primary); }
+        .review-close-btn {
+            padding: 6px 16px;
+            border: 2px solid var(--border);
+            border-radius: 6px;
+            background: white;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        .review-close-btn:hover { background: #f0f0f0; }
+        .review-drawing-container {
+            flex: 1;
+            overflow: auto;
+            position: relative;
+            cursor: crosshair;
+        }
+        .review-drawing-inner {
+            position: relative;
+            display: inline-block;
+            min-width: 100%;
+        }
+        .review-drawing-inner img {
+            display: block;
+            width: 100%;
+            height: auto;
+            user-select: none;
+            -webkit-user-drag: none;
+        }
+        .review-marker {
+            position: absolute;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: 3px solid var(--success);
+            background: rgba(40,167,69,0.15);
+            transform: translate(-50%, -50%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--success);
+            pointer-events: none;
+            z-index: 2;
+        }
+        .review-marker.just-placed {
+            border-color: var(--primary);
+            background: rgba(0,102,204,0.2);
+            color: var(--primary);
+            width: 34px;
+            height: 34px;
+            font-size: 0.8rem;
+            animation: marker-pulse 1s 2;
+        }
+        @media (max-width: 768px) {
+            .review-overlay.active { flex-direction: column; padding: 10px; }
+            .review-sidebar { width: 100%; min-width: 0; max-height: 30vh; }
+        }
+
         /* Make due-table rows clickable */
         .due-table tbody tr:not(.group-header) { cursor: pointer; transition: background 0.15s; }
         .due-table tbody tr:not(.group-header):hover { background: #e8f0fe; }
@@ -668,6 +813,7 @@
                 <button onclick="toggleArtikelForm('new')">+ Neu</button>
                 <button onclick="toggleArtikelForm('edit')">Bearbeiten</button>
                 <button class="danger" onclick="deleteSelectedArtikel()">Löschen</button>
+                <button id="reviewDrawingBtn" onclick="openDrawingReview()" style="display:none;margin-left:auto;border-color:var(--primary);color:var(--primary);font-weight:600">Zeichnung sichten</button>
             </div>
             <div class="artikel-form" id="artikelForm">
                 <div class="form-grid">
@@ -1010,6 +1156,10 @@
                 document.getElementById("headerInfo").textContent =
                     `${art.artikel_nr} – ${art.bezeichnung}` +
                     (art.zeichnungs_nr ? ` | Zeichnung: ${art.zeichnungs_nr}` : "");
+
+                // Show review button if drawing is loaded
+                document.getElementById("reviewDrawingBtn").style.display =
+                    art.zeichnung_file ? "" : "none";
             } catch (e) { alert("Fehler: " + e.message); }
         }
 
@@ -1818,6 +1968,172 @@
             } catch(e) {}
         }
 
+        // --- Drawing Review Overlay ---
+        let reviewActive = false;
+        let reviewSelectedPos = null;
+
+        function openDrawingReview() {
+            if (!drawingImg.src || drawingImg.src === location.href) {
+                alert("Keine Zeichnung vorhanden. Bitte zuerst einen Artikel mit Zeichnung laden.");
+                return;
+            }
+            reviewActive = true;
+            reviewSelectedPos = null;
+            const overlay = document.getElementById("reviewOverlay");
+            overlay.classList.add("active");
+            document.getElementById("reviewDrawingImg").src = drawingImg.src;
+            renderReviewPositions();
+            renderReviewMarkers();
+            // Prevent body scroll
+            document.body.style.overflow = "hidden";
+        }
+
+        function closeDrawingReview() {
+            reviewActive = false;
+            reviewSelectedPos = null;
+            document.getElementById("reviewOverlay").classList.remove("active");
+            document.body.style.overflow = "";
+            // Sync markers back to main view
+            renderMarkers();
+            saveMarkers();
+        }
+
+        function getUniqueDrawingPositions() {
+            // Get all unique drawing-level positions (e.g. "1", "2", "5")
+            const positions = allPositions.length > 0 ? allPositions : filteredPositions;
+            const seen = new Map(); // drawingKey -> first position object
+            for (const p of positions) {
+                const key = drawingPosKey(p.pos_nr);
+                if (!seen.has(key)) {
+                    seen.set(key, p);
+                }
+            }
+            // Sort numerically
+            return [...seen.entries()].sort((a, b) => {
+                const na = parseFloat(a[0]), nb = parseFloat(b[0]);
+                return (isNaN(na) ? 0 : na) - (isNaN(nb) ? 0 : nb);
+            });
+        }
+
+        function renderReviewPositions() {
+            const list = document.getElementById("reviewPosList");
+            const entries = getUniqueDrawingPositions();
+            let placed = 0, missing = 0;
+            let html = "";
+            for (const [key, pos] of entries) {
+                const hasMarker = drawingMarkers[key] != null;
+                if (hasMarker) placed++; else missing++;
+                const cls = hasMarker ? "placed" : "missing";
+                const isActive = reviewSelectedPos === key;
+                html += `<div class="review-pos-item ${cls}${isActive ? " active-pos" : ""}" onclick="selectReviewPos('${key}')" data-review-pos="${key}">
+                    <div class="review-pos-dot"></div>
+                    <span class="review-pos-name"><strong>Pos ${key}</strong> – ${pos.pruefmerkmal || ""}</span>
+                    <span class="review-pos-badge">${hasMarker ? "gesetzt" : "fehlt"}</span>
+                </div>`;
+            }
+            list.innerHTML = html;
+            document.getElementById("reviewStats").textContent =
+                `${placed + missing} Positionen | ${placed} gesetzt | ${missing} fehlend`;
+
+            // Update hint
+            const hint = document.getElementById("reviewHint");
+            if (missing > 0 && !reviewSelectedPos) {
+                hint.innerHTML = "Wähle links eine <strong>fehlende Position</strong>, dann klicke auf die Zeichnung";
+            } else if (reviewSelectedPos) {
+                hint.innerHTML = `Klicke auf die Zeichnung um <strong>Pos ${reviewSelectedPos}</strong> zu platzieren`;
+            } else {
+                hint.innerHTML = "Alle Messpunkte sind gesetzt";
+            }
+
+            // Auto-select first missing if none selected
+            if (!reviewSelectedPos && missing > 0) {
+                for (const [key] of entries) {
+                    if (!drawingMarkers[key]) {
+                        selectReviewPos(key);
+                        break;
+                    }
+                }
+            }
+
+            // Show/hide button based on state
+            const btn = document.getElementById("reviewDrawingBtn");
+            if (btn) btn.style.display = (allPositions.length > 0 && drawingImg.src && drawingImg.src !== location.href) ? "" : "none";
+        }
+
+        function selectReviewPos(key) {
+            reviewSelectedPos = key;
+            // Update UI highlight
+            document.querySelectorAll(".review-pos-item").forEach(el => {
+                el.classList.toggle("active-pos", el.dataset.reviewPos === key);
+            });
+            const hint = document.getElementById("reviewHint");
+            hint.innerHTML = `Klicke auf die Zeichnung um <strong>Pos ${reviewSelectedPos}</strong> zu platzieren`;
+            // Scroll selected item into view
+            const activeEl = document.querySelector(`.review-pos-item[data-review-pos="${key}"]`);
+            if (activeEl) activeEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+
+        function renderReviewMarkers() {
+            const inner = document.getElementById("reviewDrawingInner");
+            inner.querySelectorAll(".review-marker").forEach(m => m.remove());
+            for (const [posNr, coords] of Object.entries(drawingMarkers)) {
+                const marker = document.createElement("div");
+                marker.className = "review-marker";
+                marker.textContent = posNr;
+                marker.style.left = (coords.x * 100) + "%";
+                marker.style.top = (coords.y * 100) + "%";
+                inner.appendChild(marker);
+            }
+        }
+
+        // Click on review drawing to place marker
+        document.addEventListener("DOMContentLoaded", () => {
+            const reviewInner = document.getElementById("reviewDrawingInner");
+            if (!reviewInner) return;
+            reviewInner.addEventListener("click", (e) => {
+                if (!reviewActive || !reviewSelectedPos) return;
+                const img = document.getElementById("reviewDrawingImg");
+                const rect = img.getBoundingClientRect();
+                const x = (e.clientX - rect.left) / rect.width;
+                const y = (e.clientY - rect.top) / rect.height;
+                if (x < 0 || x > 1 || y < 0 || y > 1) return;
+
+                drawingMarkers[reviewSelectedPos] = { x, y };
+                renderReviewMarkers();
+
+                // Mark just-placed marker
+                const placed = reviewInner.querySelector(`.review-marker:last-child`);
+                if (placed) placed.classList.add("just-placed");
+
+                // Advance to next missing position
+                const entries = getUniqueDrawingPositions();
+                let nextMissing = null;
+                let foundCurrent = false;
+                for (const [key] of entries) {
+                    if (key === reviewSelectedPos) { foundCurrent = true; continue; }
+                    if (foundCurrent && !drawingMarkers[key]) { nextMissing = key; break; }
+                }
+                if (!nextMissing) {
+                    // Wrap around
+                    for (const [key] of entries) {
+                        if (!drawingMarkers[key]) { nextMissing = key; break; }
+                    }
+                }
+                reviewSelectedPos = nextMissing;
+                renderReviewPositions();
+                renderReviewMarkers();
+                saveMarkers();
+            });
+        });
+
+        // ESC to close review
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape" && reviewActive) {
+                closeDrawingReview();
+                return;
+            }
+        });
+
         // --- Keyboard shortcuts ---
         document.addEventListener("keydown", (e) => {
             if (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT") return;
@@ -1830,5 +2146,28 @@
             }
         });
     </script>
+
+    <!-- Drawing Review Overlay -->
+    <div class="review-overlay" id="reviewOverlay">
+        <div class="review-sidebar">
+            <div class="review-sidebar-header">
+                <h3>Messpunkte prüfen</h3>
+                <div class="review-stats" id="reviewStats"></div>
+            </div>
+            <div class="review-pos-list" id="reviewPosList"></div>
+        </div>
+        <div class="review-drawing-area">
+            <div class="review-drawing-toolbar">
+                <span class="review-title">Zeichnung</span>
+                <span class="review-hint" id="reviewHint"></span>
+                <button class="review-close-btn" onclick="closeDrawingReview()">Schließen</button>
+            </div>
+            <div class="review-drawing-container">
+                <div class="review-drawing-inner" id="reviewDrawingInner">
+                    <img id="reviewDrawingImg" src="" alt="Zeichnung">
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
