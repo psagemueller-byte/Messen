@@ -588,6 +588,81 @@
             font-weight: 600;
         }
         .loaded-info.visible { display: block; }
+
+        /* Article database */
+        .artikel-panel {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .artikel-panel h2 { margin-bottom: 16px; font-size: 1.2rem; }
+        .artikel-select-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+        .artikel-select-row select {
+            flex: 1;
+            min-width: 200px;
+            padding: 10px 14px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+        .artikel-select-row button {
+            padding: 10px 18px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            background: white;
+            font-size: 0.9rem;
+            cursor: pointer;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .artikel-select-row button.primary { background: var(--primary); color: white; border-color: var(--primary); }
+        .artikel-select-row button.danger { border-color: var(--danger); color: var(--danger); }
+        .artikel-form {
+            display: none;
+            border: 2px solid var(--border);
+            border-radius: 10px;
+            padding: 16px;
+            margin-top: 12px;
+            background: #f8f9fa;
+        }
+        .artikel-form.visible { display: block; }
+        .artikel-form .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        .artikel-form label { font-size: 0.85rem; font-weight: 600; color: #555; margin-bottom: 2px; }
+        .artikel-form input {
+            padding: 8px 10px;
+            border: 2px solid var(--border);
+            border-radius: 6px;
+            font-size: 0.95rem;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .artikel-form .file-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .artikel-form .file-row label { min-width: 90px; }
+        .artikel-form .file-row .file-status {
+            font-size: 0.85rem;
+            color: #666;
+            flex: 1;
+        }
+        .artikel-form .file-row .file-status.ok { color: var(--success); font-weight: 600; }
+        .artikel-form .btn-row { display: flex; gap: 8px; margin-top: 12px; }
     </style>
 </head>
 <body>
@@ -597,9 +672,48 @@
     </div>
 
     <div class="container">
-        <!-- Setup Panel -->
+        <!-- Article Database Panel -->
+        <div class="artikel-panel" id="artikelPanel">
+            <h2>Artikeldatenbank</h2>
+            <div class="artikel-select-row">
+                <select id="artikelSelect">
+                    <option value="">– Artikel wählen –</option>
+                </select>
+                <button class="primary" onclick="loadSelectedArtikel()">Laden</button>
+                <button onclick="toggleArtikelForm('new')">+ Neu</button>
+                <button onclick="toggleArtikelForm('edit')">Bearbeiten</button>
+                <button class="danger" onclick="deleteSelectedArtikel()">Löschen</button>
+            </div>
+            <div class="artikel-form" id="artikelForm">
+                <div class="form-grid">
+                    <div><label>Artikelnummer *</label><input id="afArtikelNr"></div>
+                    <div><label>Bezeichnung</label><input id="afBezeichnung"></div>
+                    <div><label>Ident-Nr.</label><input id="afIdentNr"></div>
+                    <div><label>Zeichnungs-Nr.</label><input id="afZeichnungsNr"></div>
+                    <div><label>Version</label><input id="afVersion"></div>
+                </div>
+                <div class="file-row">
+                    <label>Messplan:</label>
+                    <span class="file-status" id="afMessplanStatus">Keine Datei</span>
+                    <button onclick="document.getElementById('afMessplanInput').click()">PDF wählen</button>
+                    <input type="file" id="afMessplanInput" accept=".pdf" style="display:none">
+                </div>
+                <div class="file-row">
+                    <label>Zeichnung:</label>
+                    <span class="file-status" id="afZeichnungStatus">Keine Datei</span>
+                    <button onclick="document.getElementById('afZeichnungInput').click()">PDF wählen</button>
+                    <input type="file" id="afZeichnungInput" accept=".pdf,image/*" style="display:none">
+                </div>
+                <div class="btn-row">
+                    <button class="btn-primary" id="afSaveBtn" onclick="saveArtikel()">Speichern</button>
+                    <button onclick="toggleArtikelForm()">Abbrechen</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Setup Panel (manual / direct upload fallback) -->
         <div class="setup-panel" id="setupPanel">
-            <h2>Prüfplan laden</h2>
+            <h2>Prüfplan laden (manuell)</h2>
 
             <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
                 <div class="icon">&#128196;</div>
@@ -733,6 +847,178 @@
         let autoInterval = null;
         let taktStartTime = null;
         let taktProgressInterval = null;
+        let artikelList = [];
+        let editArtikelId = null;
+
+        // --- Article Database ---
+        async function fetchArtikelList() {
+            try {
+                const res = await fetch("/api/artikel");
+                artikelList = await res.json();
+                const sel = document.getElementById("artikelSelect");
+                const prev = sel.value;
+                sel.innerHTML = '<option value="">– Artikel wählen –</option>';
+                for (const a of artikelList) {
+                    const label = `${a.artikel_nr} – ${a.bezeichnung}` +
+                        (a.version ? ` (V${a.version})` : "");
+                    sel.innerHTML += `<option value="${a.id}">${label}</option>`;
+                }
+                if (prev) sel.value = prev;
+            } catch (e) { console.error("Artikelliste laden:", e); }
+        }
+
+        function toggleArtikelForm(mode) {
+            const form = document.getElementById("artikelForm");
+            if (!mode || form.classList.contains("visible")) {
+                form.classList.remove("visible");
+                editArtikelId = null;
+                return;
+            }
+            form.classList.add("visible");
+            if (mode === "edit") {
+                const sel = document.getElementById("artikelSelect");
+                const art = artikelList.find(a => a.id === parseInt(sel.value));
+                if (!art) { alert("Bitte zuerst einen Artikel auswählen."); form.classList.remove("visible"); return; }
+                editArtikelId = art.id;
+                document.getElementById("afArtikelNr").value = art.artikel_nr;
+                document.getElementById("afBezeichnung").value = art.bezeichnung;
+                document.getElementById("afIdentNr").value = art.ident_nr;
+                document.getElementById("afZeichnungsNr").value = art.zeichnungs_nr;
+                document.getElementById("afVersion").value = art.version;
+                document.getElementById("afMessplanStatus").textContent = art.messplan_file ? "Vorhanden" : "Keine Datei";
+                document.getElementById("afMessplanStatus").className = "file-status" + (art.messplan_file ? " ok" : "");
+                document.getElementById("afZeichnungStatus").textContent = art.zeichnung_file ? "Vorhanden" : "Keine Datei";
+                document.getElementById("afZeichnungStatus").className = "file-status" + (art.zeichnung_file ? " ok" : "");
+                document.getElementById("afSaveBtn").textContent = "Aktualisieren";
+            } else {
+                editArtikelId = null;
+                document.getElementById("afArtikelNr").value = "";
+                document.getElementById("afBezeichnung").value = "";
+                document.getElementById("afIdentNr").value = "";
+                document.getElementById("afZeichnungsNr").value = "";
+                document.getElementById("afVersion").value = "";
+                document.getElementById("afMessplanStatus").textContent = "Keine Datei";
+                document.getElementById("afMessplanStatus").className = "file-status";
+                document.getElementById("afZeichnungStatus").textContent = "Keine Datei";
+                document.getElementById("afZeichnungStatus").className = "file-status";
+                document.getElementById("afSaveBtn").textContent = "Speichern";
+            }
+        }
+
+        async function saveArtikel() {
+            const data = {
+                artikel_nr: document.getElementById("afArtikelNr").value,
+                bezeichnung: document.getElementById("afBezeichnung").value,
+                ident_nr: document.getElementById("afIdentNr").value,
+                zeichnungs_nr: document.getElementById("afZeichnungsNr").value,
+                version: document.getElementById("afVersion").value,
+            };
+            if (!data.artikel_nr.trim()) { alert("Artikelnummer ist Pflicht"); return; }
+
+            let artId = editArtikelId;
+            try {
+                if (artId) {
+                    await fetch(`/api/artikel/${artId}`, { method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify(data) });
+                } else {
+                    const res = await fetch("/api/artikel", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(data) });
+                    const result = await res.json();
+                    if (result.error) { alert(result.error); return; }
+                    artId = result.id;
+                }
+
+                // Upload files if selected
+                const mpFile = document.getElementById("afMessplanInput").files[0];
+                const zFile = document.getElementById("afZeichnungInput").files[0];
+                if (mpFile) {
+                    const fd = new FormData(); fd.append("file", mpFile);
+                    await fetch(`/api/artikel/${artId}/upload-messplan`, { method: "POST", body: fd });
+                }
+                if (zFile) {
+                    const fd = new FormData(); fd.append("file", zFile);
+                    await fetch(`/api/artikel/${artId}/upload-zeichnung`, { method: "POST", body: fd });
+                }
+
+                await fetchArtikelList();
+                document.getElementById("artikelSelect").value = artId;
+                toggleArtikelForm();
+                document.getElementById("afMessplanInput").value = "";
+                document.getElementById("afZeichnungInput").value = "";
+            } catch (e) { alert("Fehler: " + e.message); }
+        }
+
+        async function deleteSelectedArtikel() {
+            const sel = document.getElementById("artikelSelect");
+            if (!sel.value) { alert("Bitte zuerst einen Artikel auswählen."); return; }
+            const art = artikelList.find(a => a.id === parseInt(sel.value));
+            if (!confirm(`Artikel "${art.artikel_nr} – ${art.bezeichnung}" wirklich löschen?`)) return;
+            await fetch(`/api/artikel/${sel.value}`, { method: "DELETE" });
+            await fetchArtikelList();
+        }
+
+        async function loadSelectedArtikel() {
+            const sel = document.getElementById("artikelSelect");
+            if (!sel.value) { alert("Bitte zuerst einen Artikel auswählen."); return; }
+            const art = artikelList.find(a => a.id === parseInt(sel.value));
+            document.getElementById("headerInfo").textContent = `Lade ${art.artikel_nr}...`;
+
+            try {
+                const res = await fetch(`/api/artikel/${sel.value}/load`);
+                const data = await res.json();
+                if (data.error) { alert(data.error); return; }
+
+                // Apply Prüfplan via existing loadData logic
+                if (data.pruefplan) {
+                    loadData(data.pruefplan, `Artikel ${art.artikel_nr}`);
+                } else if (data.pruefplan_error) {
+                    alert("Messplan-Fehler: " + data.pruefplan_error);
+                }
+
+                // Apply Zeichnung
+                if (data.zeichnung) {
+                    const zd = data.zeichnung;
+                    drawingImg.src = zd.image;
+                    drawingImg.onload = () => {
+                        drawingUploadArea.style.display = "none";
+                        drawingViewer.style.display = "block";
+                        document.getElementById("drawingToolbar").style.display = "flex";
+                        updateCalibPosSelect();
+                        if (zd.markers && zd.markers.length > 0) {
+                            drawingMarkers = {};
+                            for (const m of zd.markers) {
+                                drawingMarkers[m.pos_nr] = { x: m.x, y: m.y };
+                            }
+                            renderMarkers();
+                            saveMarkers();
+                            document.getElementById("drawingStatus").textContent =
+                                `${zd.matched_markers} Messpunkte erkannt`;
+                        } else {
+                            restoreMarkers();
+                            document.getElementById("drawingStatus").textContent =
+                                "Keine Messpunkte erkannt – bitte manuell setzen";
+                        }
+                    };
+                }
+
+                document.getElementById("headerInfo").textContent =
+                    `${art.artikel_nr} – ${art.bezeichnung}` +
+                    (headerInfo.zeichnungs_nr ? ` | Zeichnung: ${headerInfo.zeichnungs_nr}` : "");
+            } catch (e) { alert("Fehler: " + e.message); }
+        }
+
+        // File input change handlers for article form
+        document.getElementById("afMessplanInput").addEventListener("change", function() {
+            const st = document.getElementById("afMessplanStatus");
+            st.textContent = this.files[0] ? this.files[0].name : "Keine Datei";
+            st.className = "file-status" + (this.files[0] ? " ok" : "");
+        });
+        document.getElementById("afZeichnungInput").addEventListener("change", function() {
+            const st = document.getElementById("afZeichnungStatus");
+            st.textContent = this.files[0] ? this.files[0].name : "Keine Datei";
+            st.className = "file-status" + (this.files[0] ? " ok" : "");
+        });
+
+        // Load article list on page load
+        fetchArtikelList();
 
         // --- Audio ---
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
