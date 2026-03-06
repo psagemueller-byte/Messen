@@ -1337,12 +1337,18 @@
         });
 
         // --- Marker rendering & interaction ---
+        function drawingPosKey(posNr) {
+            // "5.1" -> "5", "19.1" -> "19", "7" -> "7"
+            return String(posNr).split(".")[0];
+        }
+
         function renderMarkers() {
             drawingInner.querySelectorAll(".drawing-marker").forEach(m => m.remove());
+            const hlKey = selectedHighlight ? drawingPosKey(selectedHighlight) : null;
             for (const [posNr, coords] of Object.entries(drawingMarkers)) {
                 const marker = document.createElement("div");
                 marker.className = "drawing-marker";
-                if (selectedHighlight === posNr) marker.classList.add("highlight");
+                if (hlKey === posNr) marker.classList.add("highlight");
                 marker.dataset.pos = posNr;
                 marker.textContent = posNr;
                 marker.style.left = (coords.x * 100) + "%";
@@ -1357,7 +1363,8 @@
             document.querySelectorAll(".due-table tr, #allPositionsTable tr").forEach(row => {
                 row.classList.toggle("selected-row", row.dataset.pos === selectedHighlight);
             });
-            if (selectedHighlight && drawingMarkers[posNr]) {
+            const markerKey = drawingPosKey(posNr);
+            if (selectedHighlight && drawingMarkers[markerKey]) {
                 document.getElementById("drawingSection").scrollIntoView({ behavior: "smooth", block: "nearest" });
             }
         }
