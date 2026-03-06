@@ -1147,6 +1147,9 @@
 
             // Highlight rows in table
             highlightTableRows(due);
+
+            // Update visible markers on drawing
+            renderMarkers();
         }
 
         // --- All Positions Table ---
@@ -1353,10 +1356,25 @@
             return keys;
         }
 
+        function visibleDrawingKeys() {
+            // Which markers should be shown on the drawing right now?
+            // If measurements are due: only those positions
+            // Otherwise: all positions matching the current KAPA filter
+            const due = getMeasurementsDue(partCount);
+            const positions = due.length > 0 ? due : filteredPositions;
+            const keys = new Set();
+            for (const p of positions) keys.add(drawingPosKey(p.pos_nr));
+            return keys;
+        }
+
         function renderMarkers() {
             drawingInner.querySelectorAll(".drawing-marker").forEach(m => m.remove());
             const hlKeys = highlightedDrawingKeys();
+            const visible = visibleDrawingKeys();
             for (const [posNr, coords] of Object.entries(drawingMarkers)) {
+                // Only show markers relevant to current filter/measurement
+                if (visible.size > 0 && !visible.has(posNr)) continue;
+
                 const marker = document.createElement("div");
                 marker.className = "drawing-marker";
                 if (hlKeys.has(posNr)) marker.classList.add("highlight");
