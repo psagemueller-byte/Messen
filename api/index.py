@@ -11,9 +11,7 @@ import json
 import math
 import base64
 import tempfile
-import sqlite3
-import shutil
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify
 from werkzeug.utils import secure_filename
 import pdfplumber
 import fitz  # PyMuPDF
@@ -22,43 +20,6 @@ import numpy as np
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB
-
-# --- Database & File Storage ---
-DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
-UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
-DB_PATH = os.path.join(DATA_DIR, "messen.db")
-
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-
-def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    return conn
-
-
-def init_db():
-    conn = get_db()
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS artikel (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            artikel_nr TEXT NOT NULL,
-            bezeichnung TEXT NOT NULL DEFAULT '',
-            ident_nr TEXT NOT NULL DEFAULT '',
-            zeichnungs_nr TEXT NOT NULL DEFAULT '',
-            version TEXT NOT NULL DEFAULT '',
-            messplan_file TEXT,
-            zeichnung_file TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(artikel_nr, version)
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-
-init_db()
 
 
 def parse_pruefintervall(text):
@@ -189,159 +150,6 @@ def extract_pruefplan_from_pdf(filepath):
     return {"header": header, "positions": positions}
 
 
-# --- Article Database API ---
-
-@app.route("/api/artikel", methods=["GET"])
-def list_artikel():
-    conn = get_db()
-    rows = conn.execute(
-        "SELECT id, artikel_nr, bezeichnung, ident_nr, zeichnungs_nr, version, "
-        "messplan_file, zeichnung_file FROM artikel ORDER BY artikel_nr, version"
-    ).fetchall()
-    conn.close()
-    return jsonify([dict(r) for r in rows])
-
-
-@app.route("/api/artikel", methods=["POST"])
-def create_artikel():
-    data = request.form if request.form else request.get_json(force=True)
-    artikel_nr = (data.get("artikel_nr") or "").strip()
-    if not artikel_nr:
-        return jsonify({"error": "Artikelnummer ist Pflicht"}), 400
-
-    conn = get_db()
-    try:
-        conn.execute(
-            "INSERT INTO artikel (artikel_nr, bezeichnung, ident_nr, zeichnungs_nr, version) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (
-                artikel_nr,
-                (data.get("bezeichnung") or "").strip(),
-                (data.get("ident_nr") or "").strip(),
-                (data.get("zeichnungs_nr") or "").strip(),
-                (data.get("version") or "").strip(),
-            ),
-        )
-        conn.commit()
-        art_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-    except sqlite3.IntegrityError:
-        conn.close()
-        return jsonify({"error": "Artikel + Version existiert bereits"}), 409
-    conn.close()
-    return jsonify({"id": art_id, "ok": True}), 201
-
-
-@app.route("/api/artikel/<int:art_id>", methods=["PUT"])
-def update_artikel(art_id):
-    data = request.get_json(force=True)
-    conn = get_db()
-    conn.execute(
-        "UPDATE artikel SET artikel_nr=?, bezeichnung=?, ident_nr=?, "
-        "zeichnungs_nr=?, version=? WHERE id=?",
-        (
-            (data.get("artikel_nr") or "").strip(),
-            (data.get("bezeichnung") or "").strip(),
-            (data.get("ident_nr") or "").strip(),
-            (data.get("zeichnungs_nr") or "").strip(),
-            (data.get("version") or "").strip(),
-            art_id,
-        ),
-    )
-    conn.commit()
-    conn.close()
-    return jsonify({"ok": True})
-
-
-@app.route("/api/artikel/<int:art_id>", methods=["DELETE"])
-def delete_artikel(art_id):
-    conn = get_db()
-    row = conn.execute("SELECT messplan_file, zeichnung_file FROM artikel WHERE id=?", (art_id,)).fetchone()
-    if row:
-        for f in [row["messplan_file"], row["zeichnung_file"]]:
-            if f:
-                path = os.path.join(UPLOAD_DIR, f)
-                if os.path.exists(path):
-                    os.remove(path)
-    conn.execute("DELETE FROM artikel WHERE id=?", (art_id,))
-    conn.commit()
-    conn.close()
-    return jsonify({"ok": True})
-
-
-@app.route("/api/artikel/<int:art_id>/upload-messplan", methods=["POST"])
-def upload_artikel_messplan(art_id):
-    if "file" not in request.files:
-        return jsonify({"error": "Keine Datei"}), 400
-    file = request.files["file"]
-    filename = f"messplan_{art_id}_{secure_filename(file.filename)}"
-    filepath = os.path.join(UPLOAD_DIR, filename)
-    file.save(filepath)
-    conn = get_db()
-    # Remove old file
-    old = conn.execute("SELECT messplan_file FROM artikel WHERE id=?", (art_id,)).fetchone()
-    if old and old["messplan_file"]:
-        old_path = os.path.join(UPLOAD_DIR, old["messplan_file"])
-        if os.path.exists(old_path) and old["messplan_file"] != filename:
-            os.remove(old_path)
-    conn.execute("UPDATE artikel SET messplan_file=? WHERE id=?", (filename, art_id))
-    conn.commit()
-    conn.close()
-    return jsonify({"ok": True, "filename": filename})
-
-
-@app.route("/api/artikel/<int:art_id>/upload-zeichnung", methods=["POST"])
-def upload_artikel_zeichnung(art_id):
-    if "file" not in request.files:
-        return jsonify({"error": "Keine Datei"}), 400
-    file = request.files["file"]
-    filename = f"zeichnung_{art_id}_{secure_filename(file.filename)}"
-    filepath = os.path.join(UPLOAD_DIR, filename)
-    file.save(filepath)
-    conn = get_db()
-    old = conn.execute("SELECT zeichnung_file FROM artikel WHERE id=?", (art_id,)).fetchone()
-    if old and old["zeichnung_file"]:
-        old_path = os.path.join(UPLOAD_DIR, old["zeichnung_file"])
-        if os.path.exists(old_path) and old["zeichnung_file"] != filename:
-            os.remove(old_path)
-    conn.execute("UPDATE artikel SET zeichnung_file=? WHERE id=?", (filename, art_id))
-    conn.commit()
-    conn.close()
-    return jsonify({"ok": True, "filename": filename})
-
-
-@app.route("/api/artikel/<int:art_id>/load", methods=["GET"])
-def load_artikel(art_id):
-    """Load an article's messplan + zeichnung, return parsed data."""
-    conn = get_db()
-    row = conn.execute("SELECT * FROM artikel WHERE id=?", (art_id,)).fetchone()
-    conn.close()
-    if not row:
-        return jsonify({"error": "Artikel nicht gefunden"}), 404
-
-    result = {"artikel": dict(row)}
-
-    # Parse messplan if available
-    if row["messplan_file"]:
-        mp_path = os.path.join(UPLOAD_DIR, row["messplan_file"])
-        if os.path.exists(mp_path):
-            try:
-                result["pruefplan"] = extract_pruefplan_from_pdf(mp_path)
-            except Exception as e:
-                result["pruefplan_error"] = str(e)
-
-    # Parse zeichnung if available
-    if row["zeichnung_file"]:
-        zp_path = os.path.join(UPLOAD_DIR, row["zeichnung_file"])
-        if os.path.exists(zp_path):
-            try:
-                result["zeichnung"] = extract_drawing_markers(zp_path)
-            except Exception as e:
-                result["zeichnung_error"] = str(e)
-
-    return jsonify(result)
-
-
-# --- Existing endpoints ---
 
 @app.route("/api/upload", methods=["POST"])
 def upload_pdf():
