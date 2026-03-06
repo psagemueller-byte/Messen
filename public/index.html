@@ -664,6 +664,7 @@
         .artikel-form .file-row .file-status.ok { color: var(--success); font-weight: 600; }
         .artikel-form .btn-row { display: flex; gap: 8px; margin-top: 12px; }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
 <body>
     <div class="header">
@@ -850,11 +851,21 @@
         let artikelList = [];
         let editArtikelId = null;
 
-        // --- Article Database ---
+        // --- Supabase Client ---
+        const SUPABASE_URL = "https://gnaqzjdocadcilzgippr.supabase.co";
+        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImduYXF6amRvY2FkY2lsemdpcHByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3ODI5NzAsImV4cCI6MjA4ODM1ODk3MH0.d_mIv-yy1jXEUc2TIzH5uSItzruh1KDvXpn_wV82thw";
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const BUCKET = "artikel-dateien";
+
+        // --- Article Database (Supabase) ---
         async function fetchArtikelList() {
             try {
-                const res = await fetch("/api/artikel");
-                artikelList = await res.json();
+                const { data, error } = await supabase
+                    .from("artikel")
+                    .select("*")
+                    .order("artikel_nr").order("version");
+                if (error) throw error;
+                artikelList = data || [];
                 const sel = document.getElementById("artikelSelect");
                 const prev = sel.value;
                 sel.innerHTML = '<option value="">– Artikel wählen –</option>';
@@ -885,9 +896,9 @@
                 document.getElementById("afIdentNr").value = art.ident_nr;
                 document.getElementById("afZeichnungsNr").value = art.zeichnungs_nr;
                 document.getElementById("afVersion").value = art.version;
-                document.getElementById("afMessplanStatus").textContent = art.messplan_file ? "Vorhanden" : "Keine Datei";
+                document.getElementById("afMessplanStatus").textContent = art.messplan_file ? art.messplan_file.split("/").pop() : "Keine Datei";
                 document.getElementById("afMessplanStatus").className = "file-status" + (art.messplan_file ? " ok" : "");
-                document.getElementById("afZeichnungStatus").textContent = art.zeichnung_file ? "Vorhanden" : "Keine Datei";
+                document.getElementById("afZeichnungStatus").textContent = art.zeichnung_file ? art.zeichnung_file.split("/").pop() : "Keine Datei";
                 document.getElementById("afZeichnungStatus").className = "file-status" + (art.zeichnung_file ? " ok" : "");
                 document.getElementById("afSaveBtn").textContent = "Aktualisieren";
             } else {
@@ -905,37 +916,49 @@
             }
         }
 
+        async function uploadFileToStorage(artId, fileType, file) {
+            const ext = file.name.split(".").pop();
+            const path = `${artId}/${fileType}.${ext}`;
+            // Remove old file first (ignore errors)
+            await supabase.storage.from(BUCKET).remove([path]);
+            const { error } = await supabase.storage.from(BUCKET).upload(path, file, { upsert: true });
+            if (error) throw error;
+            return path;
+        }
+
         async function saveArtikel() {
-            const data = {
-                artikel_nr: document.getElementById("afArtikelNr").value,
-                bezeichnung: document.getElementById("afBezeichnung").value,
-                ident_nr: document.getElementById("afIdentNr").value,
-                zeichnungs_nr: document.getElementById("afZeichnungsNr").value,
-                version: document.getElementById("afVersion").value,
+            const row = {
+                artikel_nr: document.getElementById("afArtikelNr").value.trim(),
+                bezeichnung: document.getElementById("afBezeichnung").value.trim(),
+                ident_nr: document.getElementById("afIdentNr").value.trim(),
+                zeichnungs_nr: document.getElementById("afZeichnungsNr").value.trim(),
+                version: document.getElementById("afVersion").value.trim(),
             };
-            if (!data.artikel_nr.trim()) { alert("Artikelnummer ist Pflicht"); return; }
+            if (!row.artikel_nr) { alert("Artikelnummer ist Pflicht"); return; }
 
             let artId = editArtikelId;
             try {
                 if (artId) {
-                    await fetch(`/api/artikel/${artId}`, { method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify(data) });
+                    const { error } = await supabase.from("artikel").update(row).eq("id", artId);
+                    if (error) throw error;
                 } else {
-                    const res = await fetch("/api/artikel", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(data) });
-                    const result = await res.json();
-                    if (result.error) { alert(result.error); return; }
-                    artId = result.id;
+                    const { data, error } = await supabase.from("artikel").insert(row).select().single();
+                    if (error) {
+                        if (error.code === "23505") { alert("Artikel + Version existiert bereits"); return; }
+                        throw error;
+                    }
+                    artId = data.id;
                 }
 
-                // Upload files if selected
+                // Upload files to Supabase Storage
                 const mpFile = document.getElementById("afMessplanInput").files[0];
                 const zFile = document.getElementById("afZeichnungInput").files[0];
-                if (mpFile) {
-                    const fd = new FormData(); fd.append("file", mpFile);
-                    await fetch(`/api/artikel/${artId}/upload-messplan`, { method: "POST", body: fd });
-                }
-                if (zFile) {
-                    const fd = new FormData(); fd.append("file", zFile);
-                    await fetch(`/api/artikel/${artId}/upload-zeichnung`, { method: "POST", body: fd });
+                const updates = {};
+                if (mpFile) updates.messplan_file = await uploadFileToStorage(artId, "messplan", mpFile);
+                if (zFile) updates.zeichnung_file = await uploadFileToStorage(artId, "zeichnung", zFile);
+                if (Object.keys(updates).length > 0) {
+                    const { error } = await supabase.from("artikel").update(updates).eq("id", artId);
+                    if (error) throw error;
                 }
 
                 await fetchArtikelList();
@@ -951,7 +974,13 @@
             if (!sel.value) { alert("Bitte zuerst einen Artikel auswählen."); return; }
             const art = artikelList.find(a => a.id === parseInt(sel.value));
             if (!confirm(`Artikel "${art.artikel_nr} – ${art.bezeichnung}" wirklich löschen?`)) return;
-            await fetch(`/api/artikel/${sel.value}`, { method: "DELETE" });
+            // Delete files from storage
+            const { data: files } = await supabase.storage.from(BUCKET).list(String(art.id));
+            if (files && files.length > 0) {
+                await supabase.storage.from(BUCKET).remove(files.map(f => `${art.id}/${f.name}`));
+            }
+            const { error } = await supabase.from("artikel").delete().eq("id", art.id);
+            if (error) { alert("Fehler: " + error.message); return; }
             await fetchArtikelList();
         }
 
@@ -962,41 +991,52 @@
             document.getElementById("headerInfo").textContent = `Lade ${art.artikel_nr}...`;
 
             try {
-                const res = await fetch(`/api/artikel/${sel.value}/load`);
-                const data = await res.json();
-                if (data.error) { alert(data.error); return; }
-
-                // Apply Prüfplan via existing loadData logic
-                if (data.pruefplan) {
-                    loadData(data.pruefplan, `Artikel ${art.artikel_nr}`);
-                } else if (data.pruefplan_error) {
-                    alert("Messplan-Fehler: " + data.pruefplan_error);
+                // Load Messplan PDF from Supabase Storage → send to existing /api/upload
+                if (art.messplan_file) {
+                    const { data: blob, error } = await supabase.storage.from(BUCKET).download(art.messplan_file);
+                    if (error) throw error;
+                    const fd = new FormData();
+                    fd.append("file", blob, art.messplan_file.split("/").pop());
+                    const res = await fetch("/api/upload", { method: "POST", body: fd });
+                    const result = await res.json();
+                    if (result.positions) {
+                        loadData(result, `Artikel ${art.artikel_nr}`);
+                    } else if (result.error) {
+                        alert("Messplan-Fehler: " + result.error);
+                    }
                 }
 
-                // Apply Zeichnung
-                if (data.zeichnung) {
-                    const zd = data.zeichnung;
-                    drawingImg.src = zd.image;
-                    drawingImg.onload = () => {
-                        drawingUploadArea.style.display = "none";
-                        drawingViewer.style.display = "block";
-                        document.getElementById("drawingToolbar").style.display = "flex";
-                        updateCalibPosSelect();
-                        if (zd.markers && zd.markers.length > 0) {
-                            drawingMarkers = {};
-                            for (const m of zd.markers) {
-                                drawingMarkers[m.pos_nr] = { x: m.x, y: m.y };
+                // Load Zeichnung PDF from Supabase Storage → send to existing /api/upload-drawing
+                if (art.zeichnung_file) {
+                    const { data: blob, error } = await supabase.storage.from(BUCKET).download(art.zeichnung_file);
+                    if (error) throw error;
+                    const fd = new FormData();
+                    fd.append("file", blob, art.zeichnung_file.split("/").pop());
+                    const res = await fetch("/api/upload-drawing", { method: "POST", body: fd });
+                    const zd = await res.json();
+                    if (zd.image) {
+                        drawingImg.src = zd.image;
+                        drawingImg.onload = () => {
+                            drawingUploadArea.style.display = "none";
+                            drawingViewer.style.display = "block";
+                            document.getElementById("drawingToolbar").style.display = "flex";
+                            updateCalibPosSelect();
+                            if (zd.markers && zd.markers.length > 0) {
+                                drawingMarkers = {};
+                                for (const m of zd.markers) {
+                                    drawingMarkers[m.pos_nr] = { x: m.x, y: m.y };
+                                }
+                                renderMarkers();
+                                saveMarkers();
+                                document.getElementById("drawingStatus").textContent =
+                                    `${zd.matched_markers} Messpunkte erkannt`;
+                            } else {
+                                restoreMarkers();
+                                document.getElementById("drawingStatus").textContent =
+                                    "Keine Messpunkte erkannt – bitte manuell setzen";
                             }
-                            renderMarkers();
-                            saveMarkers();
-                            document.getElementById("drawingStatus").textContent =
-                                `${zd.matched_markers} Messpunkte erkannt`;
-                        } else {
-                            restoreMarkers();
-                            document.getElementById("drawingStatus").textContent =
-                                "Keine Messpunkte erkannt – bitte manuell setzen";
-                        }
-                    };
+                        };
+                    }
                 }
 
                 document.getElementById("headerInfo").textContent =
