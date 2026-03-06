@@ -262,72 +262,29 @@ def upload_drawing():
 def extract_drawing_markers(filepath):
     """Extract red circle markers and their labels from a technical drawing PDF.
 
-    Strategy:
-    1. Use PyMuPDF to get all drawing paths on page 1
-    2. Find paths that are red circles/ellipses (small, roughly square bbox)
-    3. Extract all text blocks with positions
-    4. Match each red circle to the nearest text (the position number)
-    5. Render page as PNG for frontend display
+    Uses three complementary strategies:
+    A) Find red-colored text that is a number (most reliable – the number IS the label)
+    B) Find red circle/ellipse drawing paths, match to nearest number text
+    C) Find PDF annotations (circles, stamps) that are red
+
+    All strategies contribute to a merged result. Duplicates (same pos_nr or
+    very close position) are deduplicated.
     """
     doc = fitz.open(filepath)
     page = doc[0]
     pw = page.rect.width
     ph = page.rect.height
 
-    # --- Step 1: Find red circles ---
-    red_circles = []
+    markers = {}  # pos_nr -> {x, y} to deduplicate
 
-    for drawing in page.get_drawings():
-        # Check if the path contains red color (stroke or fill)
-        stroke_color = drawing.get("color")
-        fill_color = drawing.get("fill")
-
-        is_red_stroke = is_red(stroke_color)
-        is_red_fill = is_red(fill_color)
-
-        if not is_red_stroke and not is_red_fill:
-            continue
-
-        # Get bounding rect of this drawing
-        rect = drawing.get("rect")
-        if not rect:
-            continue
-        r = fitz.Rect(rect)
-        bw = r.width
-        bh = r.height
-
-        # Filter: circle markers are small and roughly square
-        # Typical marker: 5-25 pt diameter on A3/A4 drawing
-        if bw < 2 or bh < 2:
-            continue
-        if bw > pw * 0.08 or bh > ph * 0.08:
-            continue  # too large
-        aspect = max(bw, bh) / max(min(bw, bh), 0.1)
-        if aspect > 2.5:
-            continue  # not circle-like
-
-        # Check if path contains curves (circles use 'c' items = bezier curves)
-        items = drawing.get("items", [])
-        has_curves = any(item[0] == "c" for item in items)
-        if not has_curves:
-            continue  # circles are made of bezier curves, not lines
-
-        cx = (r.x0 + r.x1) / 2
-        cy = (r.y0 + r.y1) / 2
-        radius = max(bw, bh) / 2
-
-        red_circles.append({
-            "cx": cx, "cy": cy,
-            "radius": radius,
-            "x": cx / pw,  # relative 0-1
-            "y": cy / ph,
-        })
-
-    # --- Step 2: Extract all text with positions ---
-    text_blocks = []
+    # === Strategy A: Red-colored number text ===
+    # This is the most reliable: the position number inside each red circle
+    # is rendered as red text. PyMuPDF gives us text color per span.
     text_dict = page.get_text("dict")
+    all_texts = []  # collect all text for strategy B matching
+
     for block in text_dict.get("blocks", []):
-        if block.get("type") != 0:  # text block
+        if block.get("type") != 0:
             continue
         for line in block.get("lines", []):
             for span in line.get("spans", []):
@@ -337,40 +294,118 @@ def extract_drawing_markers(filepath):
                 bbox = span.get("bbox", [0, 0, 0, 0])
                 tcx = (bbox[0] + bbox[2]) / 2
                 tcy = (bbox[1] + bbox[3]) / 2
-                text_blocks.append({"text": text, "cx": tcx, "cy": tcy})
+                color_int = span.get("color", 0)
+                # PyMuPDF encodes span color as integer: 0xRRGGBB
+                sr = ((color_int >> 16) & 0xFF) / 255.0
+                sg = ((color_int >> 8) & 0xFF) / 255.0
+                sb = (color_int & 0xFF) / 255.0
 
-    # --- Step 3: Match circles to nearest number text ---
-    markers = []
+                all_texts.append({
+                    "text": text, "cx": tcx, "cy": tcy,
+                    "is_red": is_red_rgb(sr, sg, sb),
+                })
+
+                # Check: red text that is a simple number (1-999)
+                clean = text.replace(".", "").replace(",", "").strip()
+                if is_red_rgb(sr, sg, sb) and re.match(r"^\d{1,3}$", clean):
+                    num = clean.lstrip("0") or "0"
+                    if num not in markers:
+                        markers[num] = {"x": tcx / pw, "y": tcy / ph}
+
+    # === Strategy B: Red drawing paths (circles) ===
+    red_circles = []
+    for drawing in page.get_drawings():
+        stroke_color = drawing.get("color")
+        fill_color = drawing.get("fill")
+
+        if not is_red_color(stroke_color) and not is_red_color(fill_color):
+            continue
+
+        rect = drawing.get("rect")
+        if not rect:
+            continue
+        r = fitz.Rect(rect)
+        bw = r.width
+        bh = r.height
+
+        # Filter: small, roughly square
+        if bw < 2 or bh < 2:
+            continue
+        if bw > pw * 0.08 or bh > ph * 0.08:
+            continue
+        aspect = max(bw, bh) / max(min(bw, bh), 0.1)
+        if aspect > 2.5:
+            continue
+
+        # Circles use bezier curves ('c' items) in PDF
+        items = drawing.get("items", [])
+        has_curves = any(item[0] == "c" for item in items)
+        if not has_curves:
+            continue
+
+        cx = (r.x0 + r.x1) / 2
+        cy = (r.y0 + r.y1) / 2
+        radius = max(bw, bh) / 2
+        red_circles.append({"cx": cx, "cy": cy, "radius": radius})
+
+    # Match circles to nearest number text (any color)
     used_texts = set()
-
     for circle in red_circles:
-        best_text = None
+        best = None
         best_dist = float("inf")
-        search_radius = circle["radius"] * 3  # look within 3x radius
+        search_r = circle["radius"] * 3.5
 
-        for i, tb in enumerate(text_blocks):
+        for i, tb in enumerate(all_texts):
             if i in used_texts:
                 continue
-            # Check if text looks like a position number
             clean = tb["text"].replace(".", "").replace(",", "").strip()
-            if not re.match(r"^\d+$", clean):
+            if not re.match(r"^\d{1,3}$", clean):
                 continue
             dist = math.sqrt((circle["cx"] - tb["cx"]) ** 2 +
                              (circle["cy"] - tb["cy"]) ** 2)
-            if dist < search_radius and dist < best_dist:
+            if dist < search_r and dist < best_dist:
                 best_dist = dist
-                best_text = (i, clean)
+                best = (i, clean.lstrip("0") or "0")
 
-        if best_text:
-            used_texts.add(best_text[0])
-            markers.append({
-                "pos_nr": best_text[1],
-                "x": circle["x"],
-                "y": circle["y"],
-            })
+        if best:
+            used_texts.add(best[0])
+            pos_nr = best[1]
+            if pos_nr not in markers:
+                markers[pos_nr] = {
+                    "x": circle["cx"] / pw,
+                    "y": circle["cy"] / ph,
+                }
 
-    # --- Step 4: Render page as PNG ---
-    # Render at 150 DPI for good quality without being too large
+    # === Strategy C: PDF annotations ===
+    for annot in page.annots() or []:
+        # Circle/Square annotations
+        if annot.type[0] in (4, 5):  # Circle=4, Square=5
+            ac = annot.colors
+            stroke = ac.get("stroke")
+            fill_c = ac.get("fill")
+            if not is_red_color(stroke) and not is_red_color(fill_c):
+                continue
+            ar = annot.rect
+            bw, bh = ar.width, ar.height
+            if bw > pw * 0.08 or bh > ph * 0.08:
+                continue
+            cx = (ar.x0 + ar.x1) / 2
+            cy = (ar.y0 + ar.y1) / 2
+            # Find nearest number text
+            best = None
+            best_dist = float("inf")
+            for i, tb in enumerate(all_texts):
+                clean = tb["text"].replace(".", "").replace(",", "").strip()
+                if not re.match(r"^\d{1,3}$", clean):
+                    continue
+                dist = math.sqrt((cx - tb["cx"]) ** 2 + (cy - tb["cy"]) ** 2)
+                if dist < max(bw, bh) * 2 and dist < best_dist:
+                    best_dist = dist
+                    best = clean.lstrip("0") or "0"
+            if best and best not in markers:
+                markers[best] = {"x": cx / pw, "y": cy / ph}
+
+    # === Render page as PNG ===
     mat = fitz.Matrix(150 / 72, 150 / 72)
     pix = page.get_pixmap(matrix=mat)
     png_bytes = pix.tobytes("png")
@@ -378,22 +413,105 @@ def extract_drawing_markers(filepath):
 
     doc.close()
 
+    # Sort markers by pos_nr numerically
+    sorted_markers = sorted(
+        [{"pos_nr": k, "x": v["x"], "y": v["y"]} for k, v in markers.items()],
+        key=lambda m: int(m["pos_nr"]) if m["pos_nr"].isdigit() else 999,
+    )
+
     return {
         "image": f"data:image/png;base64,{image_b64}",
-        "markers": markers,
+        "markers": sorted_markers,
         "page_width": pw,
         "page_height": ph,
         "detected_circles": len(red_circles),
-        "matched_markers": len(markers),
+        "matched_markers": len(sorted_markers),
     }
 
 
-def is_red(color):
-    """Check if a color tuple represents red."""
+@app.route("/api/debug-drawing", methods=["POST"])
+def debug_drawing():
+    """Debug endpoint: show what PyMuPDF finds in the drawing PDF."""
+    if "file" not in request.files:
+        return jsonify({"error": "Keine Datei"}), 400
+    file = request.files["file"]
+    if not file.filename.lower().endswith(".pdf"):
+        return jsonify({"error": "Nur PDF"}), 400
+
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        file.save(tmp.name)
+        try:
+            doc = fitz.open(tmp.name)
+            page = doc[0]
+
+            # Collect all red drawings
+            red_drawings = []
+            for drawing in page.get_drawings():
+                sc = drawing.get("color")
+                fc = drawing.get("fill")
+                if is_red_color(sc) or is_red_color(fc):
+                    items = drawing.get("items", [])
+                    red_drawings.append({
+                        "stroke": list(sc) if sc else None,
+                        "fill": list(fc) if fc else None,
+                        "rect": list(drawing.get("rect", [])),
+                        "item_types": [it[0] for it in items],
+                        "n_items": len(items),
+                    })
+
+            # Collect all red text
+            red_texts = []
+            text_dict = page.get_text("dict")
+            for block in text_dict.get("blocks", []):
+                if block.get("type") != 0:
+                    continue
+                for line in block.get("lines", []):
+                    for span in line.get("spans", []):
+                        ci = span.get("color", 0)
+                        sr = ((ci >> 16) & 0xFF) / 255.0
+                        sg = ((ci >> 8) & 0xFF) / 255.0
+                        sb = (ci & 0xFF) / 255.0
+                        if is_red_rgb(sr, sg, sb):
+                            red_texts.append({
+                                "text": span.get("text", ""),
+                                "bbox": list(span.get("bbox", [])),
+                                "color_hex": f"#{ci:06x}",
+                                "font": span.get("font", ""),
+                            })
+
+            # Collect annotations
+            annots = []
+            for annot in page.annots() or []:
+                annots.append({
+                    "type": list(annot.type),
+                    "rect": list(annot.rect),
+                    "colors": {
+                        "stroke": list(annot.colors.get("stroke", [])),
+                        "fill": list(annot.colors.get("fill", [])),
+                    },
+                    "content": annot.info.get("content", ""),
+                })
+
+            doc.close()
+            return jsonify({
+                "red_drawings": red_drawings[:50],
+                "red_texts": red_texts[:50],
+                "annotations": annots[:50],
+                "total_drawings": len(list(page.get_drawings())) if False else "see red_drawings",
+            })
+        finally:
+            os.unlink(tmp.name)
+
+
+def is_red_rgb(r, g, b):
+    """Check if RGB values (0-1 float) represent red."""
+    return r > 0.6 and g < 0.35 and b < 0.35
+
+
+def is_red_color(color):
+    """Check if a PyMuPDF color tuple represents red."""
     if not color or not isinstance(color, (list, tuple)):
         return False
     if len(color) < 3:
         return False
-    r, g, b = color[0], color[1], color[2]
-    # Red: high R, low G, low B
-    return r > 0.6 and g < 0.35 and b < 0.35
+    return is_red_rgb(color[0], color[1], color[2])

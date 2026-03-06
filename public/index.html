@@ -434,15 +434,19 @@
             font-size: 0.85rem;
         }
         .drawing-viewer {
-            position: relative;
             overflow: auto;
             border: 2px solid var(--border);
             border-radius: 8px;
             background: #fafafa;
             cursor: default;
-            max-height: 60vh;
+            max-height: 70vh;
         }
         .drawing-viewer.calibrating { cursor: crosshair; }
+        .drawing-inner {
+            position: relative;
+            display: inline-block;
+            min-width: 100%;
+        }
         .drawing-viewer img {
             display: block;
             width: 100%;
@@ -645,7 +649,9 @@
             </div>
             <input type="file" id="drawingInput" accept=".pdf,image/*" style="display:none">
             <div class="drawing-viewer" id="drawingViewer" style="display:none">
-                <img id="drawingImg" src="" alt="Messpunktzeichnung">
+                <div class="drawing-inner" id="drawingInner">
+                    <img id="drawingImg" src="" alt="Messpunktzeichnung">
+                </div>
             </div>
         </div>
 
@@ -1160,6 +1166,7 @@
         const drawingUploadArea = document.getElementById("drawingUploadArea");
         const drawingInput = document.getElementById("drawingInput");
         const drawingViewer = document.getElementById("drawingViewer");
+        const drawingInner = document.getElementById("drawingInner");
         const drawingImg = document.getElementById("drawingImg");
 
         drawingUploadArea.addEventListener("dragover", (e) => { e.preventDefault(); drawingUploadArea.style.borderColor = "var(--primary)"; });
@@ -1267,7 +1274,7 @@
             }
         }
 
-        drawingViewer.addEventListener("click", (e) => {
+        drawingInner.addEventListener("click", (e) => {
             if (!calibrationMode) return;
             const rect = drawingImg.getBoundingClientRect();
             const x = (e.clientX - rect.left) / rect.width;
@@ -1287,7 +1294,7 @@
 
         // --- Marker rendering & interaction ---
         function renderMarkers() {
-            drawingViewer.querySelectorAll(".drawing-marker").forEach(m => m.remove());
+            drawingInner.querySelectorAll(".drawing-marker").forEach(m => m.remove());
             for (const [posNr, coords] of Object.entries(drawingMarkers)) {
                 const marker = document.createElement("div");
                 marker.className = "drawing-marker";
@@ -1296,7 +1303,7 @@
                 marker.textContent = posNr;
                 marker.style.left = (coords.x * 100) + "%";
                 marker.style.top = (coords.y * 100) + "%";
-                drawingViewer.appendChild(marker);
+                drawingInner.appendChild(marker);
             }
         }
 
