@@ -288,64 +288,49 @@
             50% { transform: scale(1.02); }
         }
 
-        /* Measurement cards */
+        /* Measurement table (compact) */
         .measurements-container {
             display: none;
         }
         .measurements-container.visible { display: block; }
         .measurements-container h3 {
-            margin-bottom: 16px;
-            font-size: 1.2rem;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
         }
 
-        .measurement-card {
+        .due-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.95rem;
             background: var(--card);
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 12px;
+            border-radius: 10px;
+            overflow: hidden;
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            border-left: 6px solid var(--warning);
-            display: grid;
-            grid-template-columns: 80px 1fr;
-            gap: 16px;
-            align-items: center;
         }
-        .measurement-card .pos-nr {
-            font-size: 1.8rem;
+        .due-table th {
+            background: var(--warning);
+            color: #333;
             font-weight: 700;
-            color: var(--primary);
-            text-align: center;
+            padding: 8px 10px;
+            text-align: left;
+            font-size: 0.85rem;
+            white-space: nowrap;
         }
-        .measurement-card .details { line-height: 1.6; }
-        .measurement-card .merkmal {
-            font-size: 1.3rem;
-            font-weight: 700;
+        .due-table td {
+            padding: 6px 10px;
+            border-bottom: 1px solid #eee;
         }
-        .measurement-card .toleranz {
-            font-size: 1.1rem;
-            color: #555;
-        }
-        .measurement-card .toleranz span {
-            font-weight: 600;
-            padding: 2px 8px;
-            border-radius: 4px;
-            background: #e8f0fe;
-        }
-        .measurement-card .messmittel-highlight {
-            display: inline-block;
-            margin-top: 6px;
-            padding: 6px 14px;
+        .due-table tr:last-child td { border-bottom: none; }
+        .due-table .group-header td {
             background: var(--primary);
             color: white;
-            border-radius: 6px;
-            font-size: 1.1rem;
             font-weight: 700;
+            font-size: 0.95rem;
+            padding: 6px 10px;
         }
-        .measurement-card .meta {
-            font-size: 0.85rem;
-            color: #888;
-            margin-top: 4px;
-        }
+        .due-table .pos-cell { font-weight: 700; color: var(--primary); white-space: nowrap; }
+        .due-table .merkmal-cell { font-weight: 600; }
+        .due-table .tol-cell { font-size: 0.85rem; color: #555; white-space: nowrap; }
 
         /* All positions table */
         .all-positions {
@@ -936,21 +921,28 @@
                 measContainer.classList.add("visible");
                 // Sort by Messmittel so same tools are grouped together
                 due.sort((a, b) => a.messmittel.localeCompare(b.messmittel));
-                cardsContainer.innerHTML = due.map(pos => `
-                    <div class="measurement-card">
-                        <div class="pos-nr">${pos.pos_nr}</div>
-                        <div class="details">
-                            <div class="merkmal">${pos.pruefmerkmal}</div>
-                            <div class="toleranz">
-                                <span>UT ${pos.ut}</span> / <span>OT ${pos.ot}</span>
-                            </div>
-                            <div class="messmittel-highlight">${pos.messmittel}</div>
-                            <div class="meta">
-                                ${pos.pruefintervall_text} | ${pos.dokumentation}
-                            </div>
-                        </div>
-                    </div>
-                `).join("");
+                // Group by Messmittel
+                const groups = {};
+                for (const pos of due) {
+                    const key = pos.messmittel || "Sonstige";
+                    if (!groups[key]) groups[key] = [];
+                    groups[key].push(pos);
+                }
+                let html = `<table class="due-table">
+                    <thead><tr><th>Pos</th><th>Prüfmerkmal</th><th>UT</th><th>OT</th></tr></thead><tbody>`;
+                for (const [messmittel, items] of Object.entries(groups)) {
+                    html += `<tr class="group-header"><td colspan="4">${messmittel}</td></tr>`;
+                    for (const pos of items) {
+                        html += `<tr>
+                            <td class="pos-cell">${pos.pos_nr}</td>
+                            <td class="merkmal-cell">${pos.pruefmerkmal}</td>
+                            <td class="tol-cell">${pos.ut}</td>
+                            <td class="tol-cell">${pos.ot}</td>
+                        </tr>`;
+                    }
+                }
+                html += `</tbody></table>`;
+                cardsContainer.innerHTML = html;
             }
 
             // Next measurement info
