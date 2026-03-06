@@ -1008,7 +1008,7 @@
 
                 document.getElementById("headerInfo").textContent =
                     `${art.artikel_nr} – ${art.bezeichnung}` +
-                    (headerInfo.zeichnungs_nr ? ` | Zeichnung: ${headerInfo.zeichnungs_nr}` : "");
+                    (art.zeichnungs_nr ? ` | Zeichnung: ${art.zeichnungs_nr}` : "");
             } catch (e) { alert("Fehler: " + e.message); }
         }
 
