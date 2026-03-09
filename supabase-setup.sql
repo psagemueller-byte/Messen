@@ -60,3 +60,37 @@ CREATE TABLE IF NOT EXISTS messhistorie (
 ALTER TABLE messhistorie ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow public read" ON messhistorie FOR SELECT USING (true);
 CREATE POLICY "Allow public insert" ON messhistorie FOR INSERT WITH CHECK (true);
+
+-- 6. Fertigungsauftrag-Tabelle
+CREATE TABLE IF NOT EXISTS fertigungsauftrag (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    artikel_id BIGINT REFERENCES artikel(id) ON DELETE CASCADE,
+    auftragsnummer TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'aktiv',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    completed_at TIMESTAMPTZ
+);
+
+ALTER TABLE fertigungsauftrag ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public read" ON fertigungsauftrag FOR SELECT USING (true);
+CREATE POLICY "Allow public insert" ON fertigungsauftrag FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update" ON fertigungsauftrag FOR UPDATE USING (true);
+CREATE POLICY "Allow public delete" ON fertigungsauftrag FOR DELETE USING (true);
+
+-- 7. Auftrag-Messwerte-Tabelle (Dokumentation jedes Messwerts pro Auftrag)
+CREATE TABLE IF NOT EXISTS auftrag_messwerte (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    auftrag_id BIGINT REFERENCES fertigungsauftrag(id) ON DELETE CASCADE,
+    pos_nr TEXT NOT NULL,
+    messwert DOUBLE PRECISION,
+    teil_nr INTEGER,
+    in_toleranz BOOLEAN DEFAULT true,
+    freigegeben BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE auftrag_messwerte ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public read" ON auftrag_messwerte FOR SELECT USING (true);
+CREATE POLICY "Allow public insert" ON auftrag_messwerte FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update" ON auftrag_messwerte FOR UPDATE USING (true);
+CREATE POLICY "Allow public delete" ON auftrag_messwerte FOR DELETE USING (true);

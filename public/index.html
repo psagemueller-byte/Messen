@@ -509,7 +509,44 @@
             border-radius: 4px; font-size: 0.85rem; text-align: center;
         }
         .messwert-input:focus { outline: none; border-color: var(--primary); }
+        .messwert-input.in-tolerance { border-color: #28a745; background: #eeffee; }
+        .messwert-input.out-of-tolerance { border-color: #dc3545; background: #ffeeee; animation: blink-border 0.8s infinite; }
+        .messwert-input.out-confirmed { border-color: #ff9800; background: #fff8e1; animation: none; }
+        @keyframes blink-border { 0%,100%{ box-shadow: 0 0 0 0 rgba(220,53,69,0.4); } 50%{ box-shadow: 0 0 0 4px rgba(220,53,69,0.3); } }
         .messwert-cell { padding: 2px !important; }
+        .messwert-wrapper { display: flex; align-items: center; gap: 4px; }
+        .freigabe-btn {
+            padding: 2px 6px; border: 2px solid var(--danger); border-radius: 4px;
+            background: #fff5f5; color: var(--danger); font-size: 0.7rem; font-weight: 700;
+            cursor: pointer; white-space: nowrap; animation: blink-border 0.8s infinite;
+        }
+        .freigabe-btn:hover { background: var(--danger); color: white; }
+        .freigabe-ok { font-size: 0.75rem; color: #ff9800; font-weight: 700; }
+
+        /* Fertigungsauftrag */
+        .auftrag-panel {
+            background: var(--card); border-radius: 12px; padding: 20px 24px;
+            margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); display: none;
+        }
+        .auftrag-panel.visible { display: block; }
+        .auftrag-header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+        .auftrag-header h2 { font-size: 1.1rem; margin: 0; }
+        .auftrag-info { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.9rem; color: #555; }
+        .auftrag-info .label { font-weight: 600; color: #333; }
+        .auftrag-actions { display: flex; gap: 8px; margin-left: auto; }
+        .auftrag-actions button {
+            padding: 8px 16px; border: 2px solid var(--border); border-radius: 8px;
+            background: white; font-size: 0.85rem; cursor: pointer; font-weight: 600;
+        }
+        .auftrag-actions button.primary { background: var(--primary); color: white; border-color: var(--primary); }
+        .auftrag-actions button.success { background: var(--success); color: white; border-color: var(--success); }
+        .auftrag-actions button.danger { border-color: var(--danger); color: var(--danger); }
+        .auftrag-status {
+            display: inline-block; padding: 4px 10px; border-radius: 6px;
+            font-size: 0.8rem; font-weight: 700;
+        }
+        .auftrag-status.aktiv { background: #e8f5e9; color: #2e7d32; }
+        .auftrag-status.abgeschlossen { background: #e3f2fd; color: #1565c0; }
 
         .historie-overlay {
             position: fixed; inset: 0; background: rgba(0,0,0,0.5);
@@ -844,12 +881,12 @@
                 <select id="artikelSelect">
                     <option value="">– Artikel wählen –</option>
                 </select>
-                <button class="primary" onclick="loadSelectedArtikel()">Laden</button>
+                <button class="primary" onclick="createFertigungsauftrag()">Fertigungsauftrag erstellen</button>
                 <button onclick="toggleArtikelForm('new')">+ Neu</button>
                 <button onclick="toggleArtikelForm('edit')">Bearbeiten</button>
                 <button class="danger" onclick="deleteSelectedArtikel()">Löschen</button>
                 <button id="lockBtn" onclick="toggleArtikelLock()">Sperren</button>
-                <button onclick="showMesshistorie()">Historie</button>
+                <button onclick="showAuftragHistorie()">Historie</button>
                 <button id="reviewDrawingBtn" onclick="openDrawingReview()" style="display:none;margin-left:auto;border-color:var(--primary);color:var(--primary);font-weight:600">Zeichnung sichten</button>
             </div>
             <div class="artikel-form" id="artikelForm">
@@ -889,6 +926,20 @@
         </div>
         <div id="filterRow" style="display:none"><div id="kapaButtons"></div></div>
         <div id="filterInfo" style="display:none"></div>
+
+        <!-- Fertigungsauftrag Panel -->
+        <div class="auftrag-panel" id="auftragPanel">
+            <div class="auftrag-header">
+                <h2>Fertigungsauftrag</h2>
+                <span class="auftrag-status aktiv" id="auftragStatus">Aktiv</span>
+                <div class="auftrag-info" id="auftragInfo"></div>
+                <div class="auftrag-actions">
+                    <button class="success" id="auftragSaveBtn" onclick="saveAuftragMesswerte()">Messwerte speichern</button>
+                    <button class="primary" id="auftragCompleteBtn" onclick="completeAuftrag()">Auftrag abschließen</button>
+                    <button class="danger" id="auftragCancelBtn" onclick="cancelAuftrag()">Abbrechen</button>
+                </div>
+            </div>
+        </div>
 
         <!-- Abteilungs-Filter (eigene prominente Sektion) -->
         <div class="filter-section" id="filterSection">
@@ -988,6 +1039,10 @@
         let taktProgressInterval = null;
         let artikelList = [];
         let editArtikelId = null;
+        // Fertigungsauftrag state
+        let currentAuftrag = null; // { id, auftragsnummer, artikel_id, status, created_at }
+        let auftragMesswerte = {}; // { "pos_nr": { messwert, in_toleranz, freigegeben, teil_nr } }
+        let outOfToleranceConfirmed = new Set(); // pos_nrs confirmed despite out-of-tolerance
 
         // --- Supabase Client ---
         const SUPABASE_URL = "https://gnaqzjdocadcilzgippr.supabase.co";
@@ -1168,6 +1223,7 @@
             const sel = document.getElementById("artikelSelect");
             if (!sel.value) { alert("Bitte zuerst einen Artikel auswählen."); return; }
             const art = artikelList.find(a => a.id === parseInt(sel.value));
+            if (!art) return;
             document.getElementById("headerInfo").textContent = `Lade ${art.artikel_nr}...`;
 
             try {
@@ -1507,7 +1563,7 @@
             function finish() {
                 const val = parseInt(input.value);
                 const newEl = document.createElement("div");
-                newEl.className = "count";
+                newEl.className = "part-count-inline";
                 newEl.id = "partCount";
                 newEl.onclick = editPartCount;
                 if (!isNaN(val) && val >= 0) {
@@ -1602,65 +1658,273 @@
             return null;
         }
 
-        async function logMesswert(posNr, messwert) {
-            const artId = getCurrentArtikelId();
-            if (!sb || !artId) return;
+        async function logMesswert(posNr, messwert, inToleranz, freigegeben) {
+            if (!currentAuftrag || !sb) return;
             try {
-                await sb.from("messhistorie").insert({
-                    artikel_id: artId,
-                    pos_nr: posNr,
-                    messwert: messwert,
-                    teil_nr: partCount
-                });
-            } catch(e) { console.error("Messhistorie-Log fehlgeschlagen:", e); }
+                // Upsert into auftrag_messwerte
+                const existing = auftragMesswerte[posNr];
+                if (existing && existing.id) {
+                    await sb.from("auftrag_messwerte").update({
+                        messwert: messwert,
+                        teil_nr: partCount,
+                        in_toleranz: inToleranz,
+                        freigegeben: freigegeben
+                    }).eq("id", existing.id);
+                    existing.messwert = messwert;
+                    existing.in_toleranz = inToleranz;
+                    existing.freigegeben = freigegeben;
+                    existing.teil_nr = partCount;
+                } else {
+                    const { data, error } = await sb.from("auftrag_messwerte").insert({
+                        auftrag_id: currentAuftrag.id,
+                        pos_nr: posNr,
+                        messwert: messwert,
+                        teil_nr: partCount,
+                        in_toleranz: inToleranz,
+                        freigegeben: freigegeben
+                    }).select().single();
+                    if (!error && data) {
+                        auftragMesswerte[posNr] = { id: data.id, messwert, in_toleranz: inToleranz, freigegeben, teil_nr: partCount };
+                    }
+                }
+            } catch(e) { console.error("Messwert-Log fehlgeschlagen:", e); }
         }
 
-        function onMesswertChange(input) {
-            const val = parseFloat(input.value);
-            if (isNaN(val)) return;
+        function onMesswertInput(input) {
+            // Handle comma as decimal separator
+            let rawVal = input.value.replace(",", ".");
+            const val = parseFloat(rawVal);
             const posNr = input.dataset.pos;
             const ut = parseFloat(input.dataset.ut);
             const ot = parseFloat(input.dataset.ot);
-            // Visual feedback for in/out of tolerance
-            if (!isNaN(ut) && !isNaN(ot)) {
-                if (val >= ut && val <= ot) {
-                    input.style.borderColor = "#28a745";
-                    input.style.background = "#eeffee";
-                } else {
-                    input.style.borderColor = "#dc3545";
-                    input.style.background = "#ffeeee";
-                }
-            }
-            logMesswert(posNr, val);
-        }
+            const wrapper = input.closest(".messwert-wrapper");
 
-        async function showMesshistorie() {
-            const artId = getCurrentArtikelId();
-            if (!sb || !artId) { alert("Bitte zuerst einen Artikel laden."); return; }
-            try {
-                const { data, error } = await sb.from("messhistorie")
-                    .select("*")
-                    .eq("artikel_id", artId)
-                    .order("created_at", { ascending: false })
-                    .limit(200);
-                if (error) throw error;
-                let html = `<div class="historie-overlay" id="historieOverlay" onclick="if(event.target===this)this.remove()">
-                    <div class="historie-dialog">
-                        <div class="historie-header">
-                            <h3>Messhistorie</h3>
-                            <button onclick="document.getElementById('historieOverlay').remove()">&times;</button>
-                        </div>
-                        <table class="historie-table">
-                            <thead><tr><th>Datum</th><th>Pos</th><th>Messwert</th><th>Teil-Nr</th></tr></thead><tbody>`;
-                if (data && data.length > 0) {
-                    for (const row of data) {
-                        const date = new Date(row.created_at).toLocaleString("de-DE");
-                        html += `<tr><td>${date}</td><td>${row.pos_nr}</td><td>${row.messwert != null ? row.messwert : "–"}</td><td>${row.teil_nr || "–"}</td></tr>`;
+            // Remove old classes and freigabe elements
+            input.classList.remove("in-tolerance", "out-of-tolerance", "out-confirmed");
+            input.style.borderColor = "";
+            input.style.background = "";
+            if (wrapper) {
+                const oldBtn = wrapper.querySelector(".freigabe-btn");
+                if (oldBtn) oldBtn.remove();
+                const oldOk = wrapper.querySelector(".freigabe-ok");
+                if (oldOk) oldOk.remove();
+            }
+
+            if (isNaN(val)) return;
+
+            let inToleranz = true;
+            if (!isNaN(ut) && !isNaN(ot)) {
+                inToleranz = val >= ut && val <= ot;
+                if (inToleranz) {
+                    input.classList.add("in-tolerance");
+                    outOfToleranceConfirmed.delete(posNr);
+                } else if (outOfToleranceConfirmed.has(posNr)) {
+                    input.classList.add("out-confirmed");
+                    if (wrapper) {
+                        const ok = document.createElement("span");
+                        ok.className = "freigabe-ok";
+                        ok.textContent = "Freigegeben";
+                        wrapper.appendChild(ok);
                     }
                 } else {
-                    html += `<tr><td colspan="4" style="text-align:center;color:#999">Keine Einträge</td></tr>`;
+                    input.classList.add("out-of-tolerance");
+                    if (wrapper) {
+                        const btn = document.createElement("button");
+                        btn.className = "freigabe-btn";
+                        btn.textContent = "Freigeben";
+                        btn.onclick = (e) => {
+                            e.stopPropagation();
+                            outOfToleranceConfirmed.add(posNr);
+                            onMesswertInput(input); // re-evaluate
+                            logMesswert(posNr, val, false, true);
+                        };
+                        wrapper.appendChild(btn);
+                    }
                 }
-                html += `</tbody></table></div></div>`;
+            }
+
+            const freigegeben = inToleranz || outOfToleranceConfirmed.has(posNr);
+            logMesswert(posNr, val, inToleranz, freigegeben);
+        }
+
+        // --- Fertigungsauftrag ---
+        function generateAuftragNr() {
+            const now = new Date();
+            const pad = (n, l=2) => String(n).padStart(l, "0");
+            return `FA-${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+        }
+
+        async function createFertigungsauftrag() {
+            const sel = document.getElementById("artikelSelect");
+            if (!sel.value) { alert("Bitte zuerst einen Artikel auswählen."); return; }
+            if (!sb) { alert("Datenbankverbindung fehlt."); return; }
+
+            if (currentAuftrag && currentAuftrag.status === "aktiv") {
+                if (!confirm("Es gibt bereits einen aktiven Auftrag. Neuen erstellen? Der alte wird abgeschlossen.")) return;
+                await completeAuftrag(true);
+            }
+
+            const art = artikelList.find(a => a.id === parseInt(sel.value));
+            const auftragNr = generateAuftragNr();
+
+            try {
+                const { data, error } = await sb.from("fertigungsauftrag").insert({
+                    artikel_id: art.id,
+                    auftragsnummer: auftragNr,
+                    status: "aktiv"
+                }).select().single();
+                if (error) throw error;
+
+                currentAuftrag = data;
+                auftragMesswerte = {};
+                outOfToleranceConfirmed.clear();
+                partCount = 0;
+                document.getElementById("partCount").textContent = "0";
+
+                // Load the article (Messplan + Zeichnung)
+                await loadSelectedArtikel();
+
+                // Show Auftrag panel
+                showAuftragPanel();
+
+            } catch(e) { alert("Fehler beim Erstellen des Auftrags: " + e.message); }
+        }
+
+        function showAuftragPanel() {
+            if (!currentAuftrag) return;
+            const panel = document.getElementById("auftragPanel");
+            panel.classList.add("visible");
+            const art = artikelList.find(a => a.id === currentAuftrag.artikel_id);
+            const artName = art ? `${art.artikel_nr} – ${art.bezeichnung}` : "";
+            const date = new Date(currentAuftrag.created_at).toLocaleString("de-DE");
+            document.getElementById("auftragInfo").innerHTML =
+                `<span><span class="label">Auftrag:</span> ${currentAuftrag.auftragsnummer}</span>` +
+                `<span><span class="label">Artikel:</span> ${artName}</span>` +
+                `<span><span class="label">Erstellt:</span> ${date}</span>`;
+            const statusEl = document.getElementById("auftragStatus");
+            statusEl.textContent = currentAuftrag.status === "aktiv" ? "Aktiv" : "Abgeschlossen";
+            statusEl.className = "auftrag-status " + (currentAuftrag.status === "aktiv" ? "aktiv" : "abgeschlossen");
+
+            // Show/hide buttons based on status
+            document.getElementById("auftragSaveBtn").style.display = currentAuftrag.status === "aktiv" ? "" : "none";
+            document.getElementById("auftragCompleteBtn").style.display = currentAuftrag.status === "aktiv" ? "" : "none";
+            document.getElementById("auftragCancelBtn").style.display = currentAuftrag.status === "aktiv" ? "" : "none";
+        }
+
+        async function saveAuftragMesswerte() {
+            if (!currentAuftrag || !sb) return;
+            // Collect all current input values from the measurement table
+            const inputs = document.querySelectorAll(".messwert-input");
+            let saved = 0;
+            for (const input of inputs) {
+                const rawVal = input.value.replace(",", ".");
+                const val = parseFloat(rawVal);
+                if (isNaN(val)) continue;
+                const posNr = input.dataset.pos;
+                const ut = parseFloat(input.dataset.ut);
+                const ot = parseFloat(input.dataset.ot);
+                const inTol = (!isNaN(ut) && !isNaN(ot)) ? (val >= ut && val <= ot) : true;
+                const freigegeben = inTol || outOfToleranceConfirmed.has(posNr);
+                await logMesswert(posNr, val, inTol, freigegeben);
+                saved++;
+            }
+            alert(`${saved} Messwert(e) gespeichert.`);
+        }
+
+        async function completeAuftrag(silent) {
+            if (!currentAuftrag || !sb) return;
+            // Check for unconfirmed out-of-tolerance values
+            const inputs = document.querySelectorAll(".messwert-input.out-of-tolerance");
+            if (inputs.length > 0 && !silent) {
+                alert("Es gibt noch nicht freigegebene Messwerte außerhalb der Toleranz. Bitte alle Werte prüfen und freigeben.");
+                return;
+            }
+
+            if (!silent && !confirm("Auftrag abschließen und dokumentieren?")) return;
+
+            try {
+                const { error } = await sb.from("fertigungsauftrag").update({
+                    status: "abgeschlossen",
+                    completed_at: new Date().toISOString()
+                }).eq("id", currentAuftrag.id);
+                if (error) throw error;
+                currentAuftrag.status = "abgeschlossen";
+                showAuftragPanel();
+                if (!silent) alert("Auftrag " + currentAuftrag.auftragsnummer + " wurde abgeschlossen.");
+            } catch(e) { alert("Fehler: " + e.message); }
+        }
+
+        async function cancelAuftrag() {
+            if (!currentAuftrag || !sb) return;
+            if (!confirm("Auftrag wirklich abbrechen? Alle Messwerte dieses Auftrags werden gelöscht.")) return;
+            try {
+                await sb.from("auftrag_messwerte").delete().eq("auftrag_id", currentAuftrag.id);
+                await sb.from("fertigungsauftrag").delete().eq("id", currentAuftrag.id);
+                currentAuftrag = null;
+                auftragMesswerte = {};
+                outOfToleranceConfirmed.clear();
+                document.getElementById("auftragPanel").classList.remove("visible");
+            } catch(e) { alert("Fehler: " + e.message); }
+        }
+
+        async function showAuftragHistorie() {
+            const artId = getCurrentArtikelId();
+            if (!sb) { alert("Datenbankverbindung fehlt."); return; }
+            try {
+                let query = sb.from("fertigungsauftrag")
+                    .select("*, auftrag_messwerte(*)")
+                    .order("created_at", { ascending: false })
+                    .limit(50);
+                if (artId) query = query.eq("artikel_id", artId);
+
+                const { data, error } = await query;
+                if (error) throw error;
+
+                let html = `<div class="historie-overlay" id="historieOverlay" onclick="if(event.target===this)this.remove()">
+                    <div class="historie-dialog" style="max-width:800px">
+                        <div class="historie-header">
+                            <h3>Fertigungsaufträge${artId ? "" : " (alle Artikel)"}</h3>
+                            <button onclick="document.getElementById('historieOverlay').remove()">&times;</button>
+                        </div>`;
+
+                if (data && data.length > 0) {
+                    for (const auftrag of data) {
+                        const art = artikelList.find(a => a.id === auftrag.artikel_id);
+                        const artName = art ? `${art.artikel_nr} – ${art.bezeichnung}` : `Artikel ${auftrag.artikel_id}`;
+                        const date = new Date(auftrag.created_at).toLocaleString("de-DE");
+                        const endDate = auftrag.completed_at ? new Date(auftrag.completed_at).toLocaleString("de-DE") : "–";
+                        const statusCls = auftrag.status === "aktiv" ? "aktiv" : "abgeschlossen";
+                        const messwerte = auftrag.auftrag_messwerte || [];
+
+                        html += `<div style="border:1px solid #ddd;border-radius:8px;padding:12px;margin-bottom:12px">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                                <strong>${auftrag.auftragsnummer}</strong>
+                                <span class="auftrag-status ${statusCls}">${auftrag.status === "aktiv" ? "Aktiv" : "Abgeschlossen"}</span>
+                            </div>
+                            <div style="font-size:0.85rem;color:#666;margin-bottom:8px">
+                                ${artName} | Erstellt: ${date} | Abgeschlossen: ${endDate}
+                            </div>`;
+
+                        if (messwerte.length > 0) {
+                            html += `<table class="historie-table">
+                                <thead><tr><th>Pos</th><th>Messwert</th><th>Teil-Nr</th><th>In Toleranz</th><th>Freigegeben</th><th>Datum</th></tr></thead><tbody>`;
+                            for (const mw of messwerte) {
+                                const mDate = new Date(mw.created_at).toLocaleString("de-DE");
+                                const tolIcon = mw.in_toleranz ? '<span style="color:#28a745">&#10003;</span>' : '<span style="color:#dc3545">&#10007;</span>';
+                                const freeIcon = mw.freigegeben ? '<span style="color:#28a745">&#10003;</span>' : '<span style="color:#dc3545">&#10007;</span>';
+                                html += `<tr><td>${mw.pos_nr}</td><td>${mw.messwert != null ? mw.messwert : "–"}</td><td>${mw.teil_nr || "–"}</td><td>${tolIcon}</td><td>${freeIcon}</td><td>${mDate}</td></tr>`;
+                            }
+                            html += `</tbody></table>`;
+                        } else {
+                            html += `<div style="color:#999;font-size:0.85rem">Keine Messwerte</div>`;
+                        }
+                        html += `</div>`;
+                    }
+                } else {
+                    html += `<div style="text-align:center;color:#999;padding:20px">Keine Aufträge vorhanden</div>`;
+                }
+
+                html += `</div></div>`;
                 document.body.insertAdjacentHTML("beforeend", html);
             } catch(e) { alert("Fehler: " + e.message); }
         }
@@ -1709,7 +1973,7 @@
                             <td class="merkmal-cell">${pos.pruefmerkmal}</td>
                             <td class="tol-cell">${pos.ut}</td>
                             <td class="tol-cell">${pos.ot}</td>
-                            <td class="messwert-cell"><input type="number" step="any" class="messwert-input" data-pos="${pos.pos_nr}" data-ut="${pos.ut}" data-ot="${pos.ot}" placeholder="—" onclick="event.stopPropagation()" onchange="onMesswertChange(this)"></td>
+                            <td class="messwert-cell"><div class="messwert-wrapper"><input type="number" step="any" class="messwert-input" data-pos="${pos.pos_nr}" data-ut="${pos.ut}" data-ot="${pos.ot}" placeholder="—" onclick="event.stopPropagation()" oninput="onMesswertInput(this)"></div></td>
                         </tr>`;
                     }
                 }
