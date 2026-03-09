@@ -3469,11 +3469,24 @@
             if (art) {
                 // Sync the hidden artikelSelect for compatibility
                 document.getElementById("artikelSelect").value = art.id;
-                // Also update WE for this article
                 weCurrentArtikelId = art.id;
                 document.getElementById("headerInfo").textContent = `${art.artikel_nr} – ${art.bezeichnung}`;
 
-                // Load drawing for WE-Prüfpunkte tab
+                // Load Messplan (for positions used by Drawing Review)
+                if (art.messplan_file) {
+                    try {
+                        const { data: mpBlob, error: mpErr } = await sb.storage.from(BUCKET).download(art.messplan_file);
+                        if (!mpErr) {
+                            const mpFd = new FormData();
+                            mpFd.append("file", mpBlob, art.messplan_file.split("/").pop());
+                            const mpRes = await fetch("/api/upload", { method: "POST", body: mpFd });
+                            const mpData = await mpRes.json();
+                            if (mpData.positions) loadData(mpData, `Artikel ${art.artikel_nr}`);
+                        }
+                    } catch(e) { console.error("Messplan laden:", e); }
+                }
+
+                // Load drawing (for both WE-Prüfpunkte and Drawing Review)
                 if (art.zeichnung_file) {
                     try {
                         const { data: blob, error } = await sb.storage.from(BUCKET).download(art.zeichnung_file);
@@ -3483,14 +3496,21 @@
                             const res = await fetch("/api/upload-drawing", { method: "POST", body: fd });
                             const zd = await res.json();
                             if (zd.image) {
+                                // Set WE drawing
                                 document.getElementById("weDrawingImg").src = zd.image;
                                 document.getElementById("weWorkArea").style.display = "flex";
+                                // Set Fertigung drawing (for Drawing Review)
+                                drawingImg.src = zd.image;
+                                drawingImg.onload = () => {
+                                    restoreMarkers();
+                                    renderMarkers();
+                                };
                             }
                         }
                     } catch(e) { console.error("Zeichnung laden:", e); }
                 }
+
                 await weLoadPruefpunkte();
-                // Show edit sidebar in stammdaten mode
                 weMode = 'edit';
                 document.getElementById("weEditSidebar").style.display = "";
                 document.getElementById("wePrueferSidebar").style.display = "none";
