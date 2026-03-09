@@ -3504,11 +3504,14 @@
                 const isActive = i === weSelectedPunktIdx;
                 const desc = p.titel || p.anweisung || "Keine Beschreibung";
                 const fotoCount = p.fotos ? p.fotos.length : 0;
+                const pct = p.pruef_prozent ?? 100;
+                const min = p.mindest_prueflos ?? 1;
                 html += `<div class="we-punkt-item${isActive ? " active" : ""}" onclick="weSelectPunkt(${i})">
                     <div class="we-punkt-nr">${p.nr}</div>
                     <div class="we-punkt-info">
                         <div class="we-punkt-title">${p.titel || "Prüfpunkt " + p.nr}</div>
                         <div class="we-punkt-desc">${desc}${fotoCount > 0 ? " | " + fotoCount + " Foto(s)" : ""}</div>
+                        <div class="we-punkt-desc" style="color:var(--primary);margin-top:2px">${pct}% | mind. ${min} Stk.</div>
                     </div>
                 </div>`;
             }
