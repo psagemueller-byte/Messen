@@ -3441,22 +3441,42 @@
             weRenderFotos();
         }
 
-        // Photo file input handler
-        document.getElementById("weDetailFotoInput").addEventListener("change", function() {
-            if (weSelectedPunktIdx === null) return;
-            const files = this.files;
-            for (const file of files) {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    if (!wePruefpunkte[weSelectedPunktIdx].fotos) {
-                        wePruefpunkte[weSelectedPunktIdx].fotos = [];
+        // Resize image to max dimension and compress as JPEG
+        function weResizeImage(file, maxDim, quality) {
+            return new Promise((resolve) => {
+                const url = URL.createObjectURL(file);
+                const img = new Image();
+                img.onload = () => {
+                    URL.revokeObjectURL(url);
+                    let w = img.width, h = img.height;
+                    if (w > maxDim || h > maxDim) {
+                        if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+                        else { w = Math.round(w * maxDim / h); h = maxDim; }
                     }
-                    wePruefpunkte[weSelectedPunktIdx].fotos.push(e.target.result);
-                    weRenderFotos();
+                    const canvas = document.createElement("canvas");
+                    canvas.width = w; canvas.height = h;
+                    canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+                    resolve(canvas.toDataURL("image/jpeg", quality));
                 };
-                reader.readAsDataURL(file);
-            }
+                img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+                img.src = url;
+            });
+        }
+
+        // Photo file input handler
+        document.getElementById("weDetailFotoInput").addEventListener("change", async function() {
+            if (weSelectedPunktIdx === null) return;
+            const files = Array.from(this.files);
             this.value = "";
+            for (const file of files) {
+                const dataUrl = await weResizeImage(file, 1200, 0.7);
+                if (!dataUrl) continue;
+                if (!wePruefpunkte[weSelectedPunktIdx].fotos) {
+                    wePruefpunkte[weSelectedPunktIdx].fotos = [];
+                }
+                wePruefpunkte[weSelectedPunktIdx].fotos.push(dataUrl);
+                weRenderFotos();
+            }
         });
 
         function weSaveDetail() {
