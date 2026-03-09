@@ -1690,13 +1690,13 @@
             } catch(e) { console.error("Messwert-Log fehlgeschlagen:", e); }
         }
 
+        function parseNum(s) { return parseFloat(String(s).replace(",", ".")); }
+
         function onMesswertInput(input) {
-            // Handle comma as decimal separator
-            let rawVal = input.value.replace(",", ".");
-            const val = parseFloat(rawVal);
+            const val = parseNum(input.value);
             const posNr = input.dataset.pos;
-            const ut = parseFloat(input.dataset.ut);
-            const ot = parseFloat(input.dataset.ot);
+            const ut = parseNum(input.dataset.ut);
+            const ot = parseNum(input.dataset.ot);
             const wrapper = input.closest(".messwert-wrapper");
 
             // Remove old classes and freigabe elements
@@ -1817,12 +1817,11 @@
             const inputs = document.querySelectorAll(".messwert-input");
             let saved = 0;
             for (const input of inputs) {
-                const rawVal = input.value.replace(",", ".");
-                const val = parseFloat(rawVal);
+                const val = parseNum(input.value);
                 if (isNaN(val)) continue;
                 const posNr = input.dataset.pos;
-                const ut = parseFloat(input.dataset.ut);
-                const ot = parseFloat(input.dataset.ot);
+                const ut = parseNum(input.dataset.ut);
+                const ot = parseNum(input.dataset.ot);
                 const inTol = (!isNaN(ut) && !isNaN(ot)) ? (val >= ut && val <= ot) : true;
                 const freigegeben = inTol || outOfToleranceConfirmed.has(posNr);
                 await logMesswert(posNr, val, inTol, freigegeben);
@@ -1973,7 +1972,7 @@
                             <td class="merkmal-cell">${pos.pruefmerkmal}</td>
                             <td class="tol-cell">${pos.ut}</td>
                             <td class="tol-cell">${pos.ot}</td>
-                            <td class="messwert-cell"><div class="messwert-wrapper"><input type="number" step="any" class="messwert-input" data-pos="${pos.pos_nr}" data-ut="${pos.ut}" data-ot="${pos.ot}" placeholder="—" onclick="event.stopPropagation()" oninput="onMesswertInput(this)"></div></td>
+                            <td class="messwert-cell"><div class="messwert-wrapper"><input type="text" inputmode="decimal" class="messwert-input" data-pos="${pos.pos_nr}" data-ut="${pos.ut}" data-ot="${pos.ot}" placeholder="—" onclick="event.stopPropagation()" oninput="onMesswertInput(this)"></div></td>
                         </tr>`;
                     }
                 }
