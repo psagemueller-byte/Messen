@@ -515,6 +515,52 @@ def _extract_markers_vector(doc, page, pw, ph):
     return [{"pos_nr": k, "x": v["x"], "y": v["y"]} for k, v in markers.items()]
 
 
+# --- Airtable: Lieferanten ---
+AIRTABLE_PAT = os.environ.get("AIRTABLE_PAT", "")
+AIRTABLE_BASE = os.environ.get("AIRTABLE_BASE", "appA1PKnY997TR3gR")
+AIRTABLE_TABLE = os.environ.get("AIRTABLE_TABLE", "tblWtedsHnyV2kOPk")
+
+
+@app.route("/api/lieferanten", methods=["GET"])
+def get_lieferanten():
+    """Fetch supplier names from Airtable."""
+    import urllib.request
+    import urllib.parse
+
+    if not AIRTABLE_PAT:
+        return jsonify({"error": "Airtable API Token nicht konfiguriert"}), 500
+
+    lieferanten = []
+    offset = None
+    try:
+        while True:
+            params = {
+                "fields[]": "Firma",
+                "sort[0][field]": "Firma",
+                "sort[0][direction]": "asc",
+            }
+            if offset:
+                params["offset"] = offset
+            qs = urllib.parse.urlencode(params, doseq=True)
+            url = f"https://api.airtable.com/v0/{AIRTABLE_BASE}/{AIRTABLE_TABLE}?{qs}"
+            req = urllib.request.Request(url, headers={
+                "Authorization": f"Bearer {AIRTABLE_PAT}"
+            })
+            with urllib.request.urlopen(req) as resp:
+                data = json.loads(resp.read().decode())
+            for rec in data.get("records", []):
+                firma = rec.get("fields", {}).get("Firma")
+                if firma:
+                    lieferanten.append(firma)
+            offset = data.get("offset")
+            if not offset:
+                break
+    except Exception as e:
+        return jsonify({"error": f"Airtable Fehler: {str(e)}"}), 500
+
+    return jsonify({"lieferanten": lieferanten})
+
+
 # --- PIN verification endpoint ---
 STAMMDATEN_PIN = os.environ.get("STAMMDATEN_PIN", "1234")
 

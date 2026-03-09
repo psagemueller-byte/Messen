@@ -1801,6 +1801,12 @@
                 </select>
                 <button class="primary" onclick="weLoadArtikel()">Artikel laden</button>
             </div>
+            <div class="artikel-select-row" style="margin-top:8px">
+                <select id="weLieferantSelect">
+                    <option value="">– Lieferant wählen –</option>
+                </select>
+                <input type="text" id="weLieferscheinNr" placeholder="Lieferscheinnummer" style="flex:1;padding:8px 12px;border:1px solid #ccc;border-radius:6px;font-size:1rem;">
+            </div>
         </div>
 
         <!-- WE Work Area: Zeichnung + Checkliste -->
@@ -2070,6 +2076,32 @@
             if (createClient) sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
             else console.error("Supabase JS nicht geladen");
         } catch(e) { console.error("Supabase init fehlgeschlagen:", e); }
+
+        // --- Lieferanten (via Backend-API) ---
+        let lieferantenList = [];
+
+        async function fetchLieferanten() {
+            lieferantenList = [];
+            try {
+                const res = await fetch("/api/lieferanten");
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const json = await res.json();
+                lieferantenList = json.lieferanten || [];
+            } catch(e) {
+                console.error("Lieferanten laden fehlgeschlagen:", e);
+            }
+        }
+
+        function wePopulateLieferantSelect() {
+            const sel = document.getElementById("weLieferantSelect");
+            if (!sel) return;
+            const prev = sel.value;
+            sel.innerHTML = '<option value="">– Lieferant wählen –</option>';
+            for (const firma of lieferantenList) {
+                sel.innerHTML += `<option value="${firma}">${firma}</option>`;
+            }
+            if (prev) sel.value = prev;
+        }
 
         // --- Article Database (Supabase) ---
         async function fetchArtikelList() {
@@ -3785,6 +3817,11 @@
                 document.getElementById("weEditSidebar").style.display = "none";
                 document.getElementById("wePrueferSidebar").style.display = "";
                 wePopulateArtikelSelect();
+                if (lieferantenList.length === 0) {
+                    fetchLieferanten().then(() => wePopulateLieferantSelect());
+                } else {
+                    wePopulateLieferantSelect();
+                }
             } else if (mode === "stammdaten") {
                 document.querySelector(".header h1").textContent = "Stammdaten";
                 document.getElementById("headerInfo").textContent = "Artikelverwaltung";
@@ -4607,6 +4644,12 @@
         }
 
         async function weFinishPruefung() {
+            // Pflichtfelder: Lieferant + Lieferscheinnummer
+            const lieferant = document.getElementById("weLieferantSelect").value;
+            const lieferscheinNr = document.getElementById("weLieferscheinNr").value.trim();
+            if (!lieferant) { alert("Bitte einen Lieferanten auswählen."); return; }
+            if (!lieferscheinNr) { alert("Bitte eine Lieferscheinnummer eingeben."); return; }
+
             const total = wePruefpunkte.length;
             if (wePunktStatus.size < total) {
                 alert("Bitte alle Prüfpunkte bewerten.");
@@ -4629,6 +4672,8 @@
                 // Save result
                 const { error: insErr } = await sb.from("we_pruefergebnisse").insert({
                     artikel_id: weCurrentArtikelId,
+                    lieferant,
+                    lieferschein_nr: lieferscheinNr,
                     gesamtmenge: gesamt,
                     ergebnis,
                     pruefpunkte: punkte
