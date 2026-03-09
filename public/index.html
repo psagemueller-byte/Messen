@@ -1533,6 +1533,87 @@
             .we-work-area { flex-direction: column; }
             .we-sidebar { flex: none; width: 100%; position: static; max-height: none; }
         }
+
+        /* Save-Success Overlay */
+        .save-toast {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.8);
+            background: #16a34a;
+            color: #fff;
+            padding: 28px 48px;
+            border-radius: 16px;
+            font-size: 1.3rem;
+            font-weight: 600;
+            z-index: 100000;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.25s ease, transform 0.25s ease;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+            text-align: center;
+            max-width: 90vw;
+        }
+        .save-toast.visible {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
+        .save-toast .toast-icon {
+            font-size: 2.2rem;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        /* Unsaved-Changes Dialog */
+        .unsaved-overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 99999;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        .unsaved-overlay.visible { display: flex; }
+        .unsaved-dialog {
+            background: #fff;
+            border-radius: 14px;
+            padding: 32px;
+            max-width: 400px;
+            width: 90vw;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+        }
+        .unsaved-dialog h3 {
+            margin: 0 0 12px;
+            font-size: 1.2rem;
+            color: #b91c1c;
+        }
+        .unsaved-dialog p {
+            margin: 0 0 24px;
+            color: #555;
+            font-size: 0.95rem;
+        }
+        .unsaved-dialog .btn-row {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+        }
+        .unsaved-dialog button {
+            padding: 10px 24px;
+            border-radius: 8px;
+            border: none;
+            font-size: 1rem;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .unsaved-dialog .btn-discard {
+            background: #dc2626;
+            color: #fff;
+        }
+        .unsaved-dialog .btn-cancel {
+            background: #e5e7eb;
+            color: #333;
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -2777,7 +2858,7 @@
                 await logMesswert(posNr, val, inTol, freigegeben);
                 saved++;
             }
-            if (!silent) alert(`${saved} Messwert(e) gespeichert.`);
+            if (!silent) showSaveToast(`${saved} Messwert(e) gespeichert.`);
         }
 
         async function completeAuftrag(silent) {
@@ -2802,7 +2883,7 @@
                 if (error) throw error;
                 currentAuftrag.status = "abgeschlossen";
                 showAuftragPanel();
-                if (!silent) alert("Auftrag " + currentAuftrag.auftragsnummer + " wurde abgeschlossen.");
+                if (!silent) showSaveToast("Auftrag " + currentAuftrag.auftragsnummer + " wurde abgeschlossen.");
             } catch(e) { alert("Fehler: " + e.message); }
         }
 
@@ -3920,7 +4001,7 @@
                 sdToggleArtikelForm();
                 document.getElementById("sdAfMessplanInput").value = "";
                 document.getElementById("sdAfZeichnungInput").value = "";
-                alert("Artikel gespeichert.");
+                showSaveToast("Artikel gespeichert.");
             } catch(e) { alert("Fehler: " + e.message); }
         }
 
@@ -3938,7 +4019,7 @@
                 });
                 if (error) throw error;
                 nrInput.value = "";
-                alert("Fertigungsauftrag erstellt.");
+                showSaveToast("Fertigungsauftrag erstellt.");
             } catch(e) { alert("Fehler: " + e.message); }
         }
 
@@ -4398,7 +4479,7 @@
 
                 // Reload to get IDs
                 await weLoadPruefpunkte();
-                alert(`${wePruefpunkte.length} Prüfpunkt(e) gespeichert.`);
+                showSaveToast(`${wePruefpunkte.length} Prüfpunkt(e) gespeichert.`);
             } catch(e) {
                 alert("Fehler beim Speichern: " + e.message);
             }
@@ -4563,7 +4644,7 @@
 
                     alert("GESPERRT: Mindestens ein Prüfpunkt ist NOK.\nDer Artikel wurde gesperrt und ist in der Freigabe-Übersicht sichtbar.");
                 } else {
-                    alert("FREIGEGEBEN: Alle Prüfpunkte OK.\nDer Artikel ist freigegeben.");
+                    showSaveToast("FREIGEGEBEN: Alle Prüfpunkte OK.");
                 }
 
                 // Reset for next check
@@ -4797,7 +4878,7 @@
                 await loadPresetMerkmale(selectedPresetId);
                 renderPresetList();
                 renderPresetDetail();
-                alert(`Preset "${name}" gespeichert.`);
+                showSaveToast(`Preset "${name}" gespeichert.`);
             } catch(e) {
                 alert("Fehler beim Speichern: " + e.message);
             }
@@ -5023,7 +5104,7 @@
                 const art = artikelList.find(a => a.id === artikelId);
                 if (art) art.gesperrt = false;
                 await loadFreigabeListe();
-                alert("Artikel wurde freigegeben.");
+                showSaveToast("Artikel wurde freigegeben.");
             } catch(e) {
                 alert("Fehler: " + e.message);
             }
@@ -5081,11 +5162,85 @@
                 }
 
                 weRenderAll();
-                alert(`${count} Prüfmerkmal(e) aus "${preset?.name || "Preset"}" hinzugefügt. Bitte Punkte auf der Zeichnung positionieren und speichern.`);
+                showSaveToast(`${count} Prüfmerkmal(e) aus "${preset?.name || "Preset"}" hinzugefügt.`);
             } catch(e) {
                 alert("Fehler beim Laden: " + e.message);
             }
         }
+
+        // =============================================
+        // Unsaved-Changes Tracking & Save Toast
+        // =============================================
+        let _hasUnsavedChanges = false;
+        let _pendingModeSwitch = null;
+
+        function markUnsaved() { _hasUnsavedChanges = true; }
+        function markSaved()   { _hasUnsavedChanges = false; }
+
+        // Show centered save-success toast
+        function showSaveToast(msg) {
+            markSaved();
+            const el = document.getElementById("saveToast");
+            document.getElementById("saveToastMsg").textContent = msg || "Gespeichert";
+            el.classList.add("visible");
+            setTimeout(() => el.classList.remove("visible"), 2000);
+        }
+
+        // Unsaved dialog handlers
+        function unsavedCancel() {
+            document.getElementById("unsavedOverlay").classList.remove("visible");
+            _pendingModeSwitch = null;
+        }
+        function unsavedDiscard() {
+            document.getElementById("unsavedOverlay").classList.remove("visible");
+            _hasUnsavedChanges = false;
+            if (_pendingModeSwitch !== null) {
+                selectMode(_pendingModeSwitch);
+                _pendingModeSwitch = null;
+            }
+        }
+
+        // Wrap selectMode to check for unsaved changes
+        const _originalSelectMode = selectMode;
+        selectMode = function(mode) {
+            if (_hasUnsavedChanges && mode !== currentMode) {
+                _pendingModeSwitch = mode;
+                document.getElementById("unsavedOverlay").classList.add("visible");
+                return;
+            }
+            _hasUnsavedChanges = false;
+            _originalSelectMode(mode);
+        };
+
+        // Browser close/refresh guard
+        window.addEventListener("beforeunload", function(e) {
+            if (_hasUnsavedChanges) {
+                e.preventDefault();
+                e.returnValue = "";
+            }
+        });
+
+        // Track changes on form inputs in all modes
+        document.addEventListener("input", function(e) {
+            const t = e.target;
+            if (t.matches && (
+                t.matches("#fertigungMode input, #fertigungMode select, #fertigungMode textarea") ||
+                t.matches("#wareneingangMode input, #wareneingangMode select, #wareneingangMode textarea") ||
+                t.matches("#stammdatenMode input, #stammdatenMode select, #stammdatenMode textarea")
+            )) {
+                markUnsaved();
+            }
+        });
+        document.addEventListener("change", function(e) {
+            const t = e.target;
+            if (t.matches && (
+                t.matches("#fertigungMode input, #fertigungMode select, #fertigungMode textarea") ||
+                t.matches("#wareneingangMode input, #wareneingangMode select, #wareneingangMode textarea") ||
+                t.matches("#stammdatenMode input, #stammdatenMode select, #stammdatenMode textarea")
+            )) {
+                markUnsaved();
+            }
+        });
     </script>
 
     <!-- Drawing Review Overlay -->
@@ -5107,6 +5262,24 @@
                 <div class="review-drawing-inner" id="reviewDrawingInner">
                     <img id="reviewDrawingImg" src="" alt="Zeichnung">
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Save Toast -->
+    <div class="save-toast" id="saveToast">
+        <span class="toast-icon">&#10003;</span>
+        <span id="saveToastMsg">Gespeichert</span>
+    </div>
+
+    <!-- Unsaved Changes Dialog -->
+    <div class="unsaved-overlay" id="unsavedOverlay">
+        <div class="unsaved-dialog">
+            <h3>Ungespeicherte Änderungen</h3>
+            <p>Du hast Änderungen, die noch nicht gespeichert wurden. Möchtest du die Seite wirklich verlassen?</p>
+            <div class="btn-row">
+                <button class="btn-cancel" onclick="unsavedCancel()">Abbrechen</button>
+                <button class="btn-discard" onclick="unsavedDiscard()">Ohne Speichern verlassen</button>
             </div>
         </div>
     </div>
