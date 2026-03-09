@@ -94,3 +94,24 @@ CREATE POLICY "Allow public read" ON auftrag_messwerte FOR SELECT USING (true);
 CREATE POLICY "Allow public insert" ON auftrag_messwerte FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow public update" ON auftrag_messwerte FOR UPDATE USING (true);
 CREATE POLICY "Allow public delete" ON auftrag_messwerte FOR DELETE USING (true);
+
+-- 8. Wareneingang Prüfpunkte (visuelle Prüfanweisungen pro Artikel)
+CREATE TABLE IF NOT EXISTS we_pruefpunkte (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    artikel_id BIGINT REFERENCES artikel(id) ON DELETE CASCADE,
+    nummer TEXT NOT NULL,
+    form TEXT NOT NULL DEFAULT 'circle',  -- 'circle' oder 'rect'
+    x DOUBLE PRECISION NOT NULL,
+    y DOUBLE PRECISION NOT NULL,
+    titel TEXT NOT NULL DEFAULT '',
+    anweisung TEXT NOT NULL DEFAULT '',
+    fotos JSONB DEFAULT '[]',  -- Array von Base64-Strings
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE we_pruefpunkte ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public read" ON we_pruefpunkte FOR SELECT USING (true);
+CREATE POLICY "Allow public insert" ON we_pruefpunkte FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update" ON we_pruefpunkte FOR UPDATE USING (true);
+CREATE POLICY "Allow public delete" ON we_pruefpunkte FOR DELETE USING (true);
