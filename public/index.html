@@ -3179,18 +3179,46 @@
         let reviewSelectedPos = null;
 
         function openDrawingReview() {
-            if (!drawingImg.src || drawingImg.src === location.href) {
+            // Use drawingImg or weDrawingImg as fallback (Stammdaten mode)
+            const weImg = document.getElementById("weDrawingImg");
+            const hasFert = drawingImg.src && drawingImg.src !== location.href;
+            const hasWE = weImg && weImg.src && weImg.src !== location.href;
+            const imgSrc = hasFert ? drawingImg.src : (hasWE ? weImg.src : null);
+
+            if (!imgSrc) {
                 alert("Keine Zeichnung vorhanden. Bitte zuerst einen Artikel mit Zeichnung laden.");
                 return;
             }
+
+            // If opening from Stammdaten and positions not loaded yet, load them
+            if (currentMode === 'stammdaten' && allPositions.length === 0) {
+                const artId = getCurrentArtikelId();
+                const art = artikelList.find(a => a.id === artId);
+                if (art && art.messplan_file) {
+                    alert("Messplan wird geladen... Bitte erneut klicken.");
+                    (async () => {
+                        const { data: blob, error } = await sb.storage.from(BUCKET).download(art.messplan_file);
+                        if (!error) {
+                            const fd = new FormData();
+                            fd.append("file", blob, art.messplan_file.split("/").pop());
+                            const res = await fetch("/api/upload", { method: "POST", body: fd });
+                            const result = await res.json();
+                            if (result.positions) loadData(result, `Artikel ${art.artikel_nr}`);
+                        }
+                    })();
+                    return;
+                }
+            }
+
             reviewActive = true;
             reviewSelectedPos = null;
             const overlay = document.getElementById("reviewOverlay");
             overlay.classList.add("active");
-            document.getElementById("reviewDrawingImg").src = drawingImg.src;
+            document.getElementById("reviewDrawingImg").src = imgSrc;
+            // Also ensure drawingImg is set for marker saving
+            if (!hasFert && hasWE) drawingImg.src = imgSrc;
             renderReviewPositions();
             renderReviewMarkers();
-            // Prevent body scroll
             document.body.style.overflow = "hidden";
         }
 
