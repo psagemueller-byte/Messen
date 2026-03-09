@@ -1221,12 +1221,14 @@
         }
         .we-check-item.ok .we-check-nr { background: var(--success); }
         .we-check-item.nok .we-check-nr { background: var(--danger); }
-        .we-check-title { font-weight: 600; font-size: 1rem; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .we-check-label {
+            flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+        }
+        .we-check-title { font-weight: 600; font-size: 1rem; }
         .we-check-menge {
             font-size: 0.85rem; font-weight: 600; color: var(--primary);
             white-space: nowrap; padding: 4px 12px;
             background: #e8f0fe; border-radius: 12px;
-            flex-shrink: 0;
         }
         .we-check-item.ok .we-check-menge { background: #e0f5e0; color: var(--success); }
         .we-check-item.nok .we-check-menge { background: #fde0e0; color: var(--danger); }
@@ -4581,8 +4583,10 @@
                                 onclick="weSetVerdict(${i},'nok')" aria-label="NOK">&#10007;</button>
                         </div>
                         <div class="we-check-nr">${p.nr}</div>
-                        <div class="we-check-title">${p.titel || 'Prüfpunkt ' + p.nr}</div>
-                        <div class="we-check-menge">${menge} Stk. prüfen</div>
+                        <div class="we-check-label">
+                            <span class="we-check-title">${p.titel || 'Prüfpunkt ' + p.nr}</span>
+                            <span class="we-check-menge">${menge} Stk. prüfen</span>
+                        </div>
                     </div>
                     <div class="we-check-body">`;
 
