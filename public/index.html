@@ -4152,6 +4152,21 @@
             return `PA-${y}${m}${d}-${hh}${mm}${ss}`;
         }
 
+        // Auto-migrate: add pruefauftrag_nr column if missing
+        async function weEnsurePruefauftragNrColumn() {
+            if (!sb) return;
+            try {
+                // Try a quick read to see if column exists
+                const { error } = await sb.from("we_pruefergebnisse").select("pruefauftrag_nr").limit(1);
+                if (error && error.message.includes("pruefauftrag_nr")) {
+                    // Column doesn't exist - use rpc to add it
+                    await sb.rpc('exec_sql', { query: "ALTER TABLE we_pruefergebnisse ADD COLUMN IF NOT EXISTS pruefauftrag_nr TEXT NOT NULL DEFAULT ''" });
+                }
+            } catch(e) {
+                console.warn("Migration check:", e);
+            }
+        }
+
         async function weCreatePruefauftrag() {
             const sel = document.getElementById("weArtikelSelect");
             if (!sel.value) { alert("Bitte zuerst einen Artikel wählen."); return; }
@@ -4169,8 +4184,9 @@
             if (!sb) return;
 
             try {
-                // Create the Prüfauftrag in DB (status: offen)
-                const { data, error } = await sb.from("we_pruefergebnisse").insert({
+                // Try insert with pruefauftrag_nr first, fallback without it
+                let data, error;
+                ({ data, error } = await sb.from("we_pruefergebnisse").insert({
                     pruefauftrag_nr: paNr,
                     artikel_id: art.id,
                     lieferant,
@@ -4178,7 +4194,20 @@
                     gesamtmenge: 1,
                     ergebnis: 'offen',
                     pruefpunkte: []
-                }).select().single();
+                }).select().single());
+
+                // If pruefauftrag_nr column doesn't exist, insert without it
+                if (error && error.message.includes("pruefauftrag_nr")) {
+                    ({ data, error } = await sb.from("we_pruefergebnisse").insert({
+                        artikel_id: art.id,
+                        lieferant,
+                        lieferschein_nr: lieferscheinNr,
+                        bemerkung: paNr,
+                        gesamtmenge: 1,
+                        ergebnis: 'offen',
+                        pruefpunkte: []
+                    }).select().single());
+                }
                 if (error) throw error;
 
                 weCurrentPruefauftragId = data.id;
@@ -5318,7 +5347,7 @@
                 const lieferantLabel = fg.lieferant ? `Lieferant: ${fg.lieferant}` : '';
                 const lsLabel = fg.lieferschein_nr ? `LS-Nr: ${fg.lieferschein_nr}` : '';
 
-                const paNr = fg.pruefauftrag_nr || '';
+                const paNr = fg.pruefauftrag_nr || (fg.bemerkung && fg.bemerkung.startsWith('PA-') ? fg.bemerkung : '');
 
                 html += `<div class="freigabe-card">
                     <div class="freigabe-card-header">
