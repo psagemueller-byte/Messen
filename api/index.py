@@ -513,3 +513,16 @@ def _extract_markers_vector(doc, page, pw, ph):
             markers[best] = {"x": cx / pw, "y": cy / ph}
 
     return [{"pos_nr": k, "x": v["x"], "y": v["y"]} for k, v in markers.items()]
+
+
+# --- PIN verification endpoint ---
+STAMMDATEN_PIN = os.environ.get("STAMMDATEN_PIN", "1234")
+
+
+@app.route("/api/verify-pin", methods=["POST"])
+def verify_pin():
+    data = request.get_json(silent=True) or {}
+    pin = str(data.get("pin", ""))
+    if pin == STAMMDATEN_PIN:
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "error": "Falscher PIN"}), 401

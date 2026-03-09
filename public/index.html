@@ -3359,7 +3359,7 @@
         // MODE SELECTION
         // ===================================================================
         let currentMode = null; // null | 'fertigung' | 'wareneingang' | 'stammdaten'
-        const STAMMDATEN_PIN = "1234"; // Default-PIN — bei Bedarf ändern
+        // PIN wird serverseitig geprüft (POST /api/verify-pin)
 
         function selectMode(mode) {
             currentMode = mode;
@@ -3401,15 +3401,27 @@
         function closePin() {
             document.getElementById("pinOverlay").style.display = "none";
         }
-        function submitPin() {
+        async function submitPin() {
             const pin = document.getElementById("pinInput").value;
-            if (pin === STAMMDATEN_PIN) {
-                closePin();
-                selectMode("stammdaten");
-            } else {
-                document.getElementById("pinError").textContent = "Falscher PIN";
-                document.getElementById("pinInput").value = "";
-                document.getElementById("pinInput").focus();
+            const errEl = document.getElementById("pinError");
+            errEl.textContent = "";
+            try {
+                const res = await fetch("/api/verify-pin", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ pin })
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    closePin();
+                    selectMode("stammdaten");
+                } else {
+                    errEl.textContent = data.error || "Falscher PIN";
+                    document.getElementById("pinInput").value = "";
+                    document.getElementById("pinInput").focus();
+                }
+            } catch(e) {
+                errEl.textContent = "Verbindungsfehler";
             }
         }
         document.getElementById("pinInput").addEventListener("keydown", (e) => {
