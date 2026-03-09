@@ -2648,10 +2648,27 @@
                         drawingUploadArea.innerHTML = 'Zeichnungs-PDF hier ablegen oder klicken';
                     });
             } else {
-                // Image: just display, no auto-detection
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    drawingImg.src = e.target.result;
+                // Image: resize first, then display
+                if (file.size > WE_MAX_FILE_SIZE) {
+                    alert("Datei zu groß (" + (file.size / 1024 / 1024).toFixed(1) + " MB). Max. 15 MB.");
+                    return;
+                }
+                const url = URL.createObjectURL(file);
+                const tmpImg = new Image();
+                tmpImg.onload = () => {
+                    URL.revokeObjectURL(url);
+                    // Resize for display (max 2400px to keep detail for drawings)
+                    let w = tmpImg.width, h = tmpImg.height;
+                    const maxDim = 2400;
+                    if (w > maxDim || h > maxDim) {
+                        if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+                        else { w = Math.round(w * maxDim / h); h = maxDim; }
+                    }
+                    const canvas = document.createElement("canvas");
+                    canvas.width = w; canvas.height = h;
+                    canvas.getContext("2d").drawImage(tmpImg, 0, 0, w, h);
+                    drawingImg.src = canvas.toDataURL("image/jpeg", 0.85);
+                    canvas.width = 0; canvas.height = 0;
                     drawingImg.onload = () => {
                         drawingUploadArea.style.display = "none";
                         drawingViewer.style.display = "block";
@@ -2662,7 +2679,8 @@
                             "Bild geladen – Punkte manuell setzen";
                     };
                 };
-                reader.readAsDataURL(file);
+                tmpImg.onerror = () => { URL.revokeObjectURL(url); alert("Bild konnte nicht geladen werden."); };
+                tmpImg.src = url;
             }
         }
 
@@ -3442,8 +3460,14 @@
         }
 
         // Resize image to max dimension and compress as JPEG
+        const WE_MAX_FILE_SIZE = 15 * 1024 * 1024; // 15 MB
         function weResizeImage(file, maxDim, quality) {
             return new Promise((resolve) => {
+                if (file.size > WE_MAX_FILE_SIZE) {
+                    alert("Datei zu groß (" + (file.size / 1024 / 1024).toFixed(1) + " MB). Max. 15 MB.");
+                    resolve(null);
+                    return;
+                }
                 const url = URL.createObjectURL(file);
                 const img = new Image();
                 img.onload = () => {
@@ -3457,6 +3481,7 @@
                     canvas.width = w; canvas.height = h;
                     canvas.getContext("2d").drawImage(img, 0, 0, w, h);
                     resolve(canvas.toDataURL("image/jpeg", quality));
+                    canvas.width = 0; canvas.height = 0; // free memory
                 };
                 img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
                 img.src = url;
