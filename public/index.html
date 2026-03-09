@@ -2034,10 +2034,10 @@
 
             <!-- WE-Freigabe Tab -->
             <div class="sd-tab-content" id="sdTabFreigabe">
-                <h3 style="margin:0 0 16px 0">Gesperrte Artikel zur Freigabe</h3>
+                <h3 style="margin:0 0 16px 0">WE-Prüfergebnisse mit Mängeln</h3>
                 <div id="freigabeListItems"></div>
                 <div id="freigabeListEmpty" style="color:#999;font-size:0.9rem;text-align:center;padding:24px">
-                    Keine gesperrten Prüfergebnisse vorhanden.
+                    Keine offenen Prüfergebnisse mit Mängeln vorhanden.
                 </div>
             </div>
         </div>
@@ -4605,6 +4605,18 @@
                     html += `</div>`;
                 }
 
+                // Show NOK reason if set
+                const nokInfo = weNokReasons.get(i);
+                if (nokInfo && status === 'nok') {
+                    html += `<div style="margin-top:8px;padding:8px 12px;background:#fef0f0;border:1px solid #f5c6cb;border-radius:6px;font-size:0.85rem">
+                        <strong style="color:#b91c1c">Sperrgrund:</strong> ${nokInfo.grund.replace(/</g,'&lt;')}`;
+                    if (nokInfo.foto_url) {
+                        html += `<br><img src="${nokInfo.foto_url}" style="max-width:120px;max-height:80px;margin-top:6px;border-radius:4px;cursor:pointer" onclick="window.open('${nokInfo.foto_url}','_blank')">`;
+                    }
+                    html += `<br><button style="margin-top:6px;font-size:0.8rem;padding:2px 10px;border:1px solid #b91c1c;color:#b91c1c;background:#fff;border-radius:4px;cursor:pointer" onclick="weSetVerdict(${i},'nok')">Bearbeiten</button>`;
+                    html += `</div>`;
+                }
+
                 html += `</div></div>`;
             }
             container.innerHTML = html;
@@ -4631,13 +4643,68 @@
             prog.innerHTML = progHtml;
         }
 
+        let weNokReasons = new Map(); // idx → { grund, foto_url }
+        let _nokPendingIdx = null;
+
         function weSetVerdict(idx, verdict) {
             const current = wePunktStatus.get(idx);
             if (current === verdict) {
-                wePunktStatus.delete(idx); // toggle off → offen
-            } else {
-                wePunktStatus.set(idx, verdict);
+                wePunktStatus.delete(idx);
+                weNokReasons.delete(idx);
+                weRenderAll();
+                return;
             }
+            if (verdict === 'nok') {
+                // Open NOK reason dialog
+                _nokPendingIdx = idx;
+                const p = wePruefpunkte[idx];
+                document.getElementById("nokGrundLabel").textContent = `Prüfpunkt ${p.nr}: ${p.titel || 'Prüfpunkt ' + p.nr}`;
+                const existing = weNokReasons.get(idx);
+                document.getElementById("nokGrundText").value = existing ? existing.grund : '';
+                document.getElementById("nokFotoInput").value = '';
+                document.getElementById("nokFotoPreview").innerHTML = existing && existing.foto_url
+                    ? `<img src="${existing.foto_url}" style="max-width:120px;max-height:80px;border-radius:6px">`
+                    : '';
+                document.getElementById("nokGrundOverlay").classList.add("visible");
+                setTimeout(() => document.getElementById("nokGrundText").focus(), 100);
+                return;
+            }
+            wePunktStatus.set(idx, verdict);
+            weNokReasons.delete(idx);
+            weRenderAll();
+        }
+
+        function nokGrundCancel() {
+            document.getElementById("nokGrundOverlay").classList.remove("visible");
+            _nokPendingIdx = null;
+        }
+
+        async function nokGrundConfirm() {
+            const idx = _nokPendingIdx;
+            if (idx === null) return;
+            const grund = document.getElementById("nokGrundText").value.trim();
+            if (!grund) { alert("Bitte einen Sperrgrund angeben."); return; }
+
+            let foto_url = weNokReasons.get(idx)?.foto_url || null;
+            const fileInput = document.getElementById("nokFotoInput");
+            if (fileInput.files.length > 0 && sb) {
+                try {
+                    const file = fileInput.files[0];
+                    const path = `nok-fotos/${weCurrentArtikelId}/${Date.now()}_${file.name}`;
+                    const { error } = await sb.storage.from(BUCKET).upload(path, file, { upsert: true });
+                    if (error) throw error;
+                    const { data: urlData } = sb.storage.from(BUCKET).getPublicUrl(path);
+                    foto_url = urlData?.publicUrl || path;
+                } catch(e) {
+                    console.error("Foto-Upload:", e);
+                    // Continue without photo
+                }
+            }
+
+            weNokReasons.set(idx, { grund, foto_url });
+            wePunktStatus.set(idx, 'nok');
+            document.getElementById("nokGrundOverlay").classList.remove("visible");
+            _nokPendingIdx = null;
             weRenderAll();
         }
 
@@ -4664,12 +4731,20 @@
             const ergebnis = hasNok ? 'gesperrt' : 'freigegeben';
             const gesamt = parseInt(document.getElementById("weGesamtmenge").value) || 1;
 
-            // Build pruefpunkte summary
-            const punkte = wePruefpunkte.map((p, i) => ({
-                punkt_nr: p.nr,
-                titel: p.titel || 'Prüfpunkt ' + p.nr,
-                status: wePunktStatus.get(i) || 'offen'
-            }));
+            // Build pruefpunkte summary with NOK reasons
+            const punkte = wePruefpunkte.map((p, i) => {
+                const entry = {
+                    punkt_nr: p.nr,
+                    titel: p.titel || 'Prüfpunkt ' + p.nr,
+                    status: wePunktStatus.get(i) || 'offen'
+                };
+                const nokInfo = weNokReasons.get(i);
+                if (nokInfo) {
+                    entry.nok_grund = nokInfo.grund;
+                    if (nokInfo.foto_url) entry.nok_foto = nokInfo.foto_url;
+                }
+                return entry;
+            });
 
             if (!sb || !weCurrentArtikelId) return;
 
@@ -4685,13 +4760,9 @@
                 });
                 if (insErr) throw insErr;
 
-                if (hasNok) {
-                    // Block article
-                    await sb.from("artikel").update({ gesperrt: true }).eq("id", weCurrentArtikelId);
-                    // Update local list
-                    const art = artikelList.find(a => a.id === weCurrentArtikelId);
-                    if (art) art.gesperrt = true;
-                }
+                // Note: Article is NOT automatically locked.
+                // Locked articles are managed manually via Stammdaten.
+                // NOK results appear in WE-Freigabe for review.
 
                 // Reset for next check
                 weResetForNewAuftrag(ergebnis);
@@ -4703,6 +4774,7 @@
         function weResetForNewAuftrag(ergebnis) {
             // Clear state
             wePunktStatus.clear();
+            weNokReasons.clear();
             wePruefpunkte = [];
             weCurrentArtikelId = null;
 
@@ -5153,13 +5225,17 @@
                 const artLabel = art ? `${art.artikel_nr} – ${art.bezeichnung}${art.version ? ` (V${art.version})` : ""}` : `Artikel #${fg.artikel_id}`;
                 const datum = new Date(fg.created_at).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
                 const punkte = fg.pruefpunkte || [];
+                const lieferantLabel = fg.lieferant ? `Lieferant: ${fg.lieferant}` : '';
+                const lsLabel = fg.lieferschein_nr ? `LS-Nr: ${fg.lieferschein_nr}` : '';
 
                 html += `<div class="freigabe-card">
                     <div class="freigabe-card-header">
                         <div class="freigabe-card-title">${artLabel}</div>
                         <div class="freigabe-card-date">${datum}</div>
                     </div>
-                    <div>Gesamtmenge: ${fg.gesamtmenge} Stück</div>`;
+                    <div style="font-size:0.9rem;color:#555;margin-bottom:6px">
+                        Gesamtmenge: ${fg.gesamtmenge} Stück${lieferantLabel ? ' | ' + lieferantLabel : ''}${lsLabel ? ' | ' + lsLabel : ''}
+                    </div>`;
 
                 for (const pp of punkte) {
                     const icon = pp.status === 'ok'
@@ -5168,28 +5244,36 @@
                             ? '<span class="freigabe-punkt-nok">&#10007; NOK</span>'
                             : '<span style="color:#888">— offen</span>';
                     html += `<div class="freigabe-punkt">
-                        Punkt ${pp.punkt_nr}: ${pp.titel} &rarr; ${icon}
-                    </div>`;
+                        Punkt ${pp.punkt_nr}: ${pp.titel} &rarr; ${icon}`;
+
+                    // Show NOK reason and photo if available
+                    if (pp.status === 'nok' && pp.nok_grund) {
+                        html += `<div style="margin:4px 0 4px 16px;padding:6px 10px;background:#fef0f0;border:1px solid #f5c6cb;border-radius:5px;font-size:0.85rem">
+                            <strong style="color:#b91c1c">Grund:</strong> ${(pp.nok_grund || '').replace(/</g,'&lt;')}`;
+                        if (pp.nok_foto) {
+                            html += `<br><img src="${pp.nok_foto}" style="max-width:160px;max-height:100px;margin-top:4px;border-radius:4px;cursor:pointer" onclick="window.open('${pp.nok_foto}','_blank')">`;
+                        }
+                        html += `</div>`;
+                    }
+
+                    html += `</div>`;
                 }
 
                 html += `<div class="freigabe-actions">
-                    <button class="primary" onclick="freigabeFreigeben(${fg.id}, ${fg.artikel_id})">Trotzdem freigeben</button>
-                    <button class="secondary" onclick="freigabeAbschliessen(${fg.id})">Abgeschlossen (gesperrt lassen)</button>
+                    <button class="primary" onclick="freigabeFreigeben(${fg.id}, ${fg.artikel_id})">Freigeben</button>
+                    <button class="secondary" onclick="freigabeAbschliessen(${fg.id})">Abgeschlossen</button>
                 </div></div>`;
             }
             container.innerHTML = html;
         }
 
         async function freigabeFreigeben(ergebnisId, artikelId) {
-            if (!confirm("Artikel trotz NOK-Bewertungen freigeben?")) return;
+            if (!confirm("Prüfergebnis trotz NOK-Bewertungen als freigegeben markieren?")) return;
             if (!sb) return;
             try {
                 await sb.from("we_pruefergebnisse").update({ ergebnis: "freigegeben" }).eq("id", ergebnisId);
-                await sb.from("artikel").update({ gesperrt: false }).eq("id", artikelId);
-                const art = artikelList.find(a => a.id === artikelId);
-                if (art) art.gesperrt = false;
                 await loadFreigabeListe();
-                showSaveToast("Artikel wurde freigegeben.");
+                showSaveToast("Prüfergebnis wurde als freigegeben markiert.");
             } catch(e) {
                 alert("Fehler: " + e.message);
             }
@@ -5258,9 +5342,11 @@
         // =============================================
         let _hasUnsavedChanges = false;
         let _pendingModeSwitch = null;
+        let _suppressUnsaved = false; // suppress during programmatic form fills
 
-        function markUnsaved() { _hasUnsavedChanges = true; }
+        function markUnsaved() { if (!_suppressUnsaved) _hasUnsavedChanges = true; }
         function markSaved()   { _hasUnsavedChanges = false; }
+        function withoutUnsaved(fn) { _suppressUnsaved = true; try { fn(); } finally { setTimeout(() => { _suppressUnsaved = false; }, 0); } }
 
         // Show centered save-success toast
         function showSaveToast(msg) {
@@ -5306,26 +5392,19 @@
         });
 
         // Track changes on form inputs in all modes
-        document.addEventListener("input", function(e) {
-            const t = e.target;
-            if (t.matches && (
-                t.matches("#fertigungMode input, #fertigungMode select, #fertigungMode textarea") ||
-                t.matches("#wareneingangMode input, #wareneingangMode select, #wareneingangMode textarea") ||
-                t.matches("#stammdatenMode input, #stammdatenMode select, #stammdatenMode textarea")
-            )) {
-                markUnsaved();
-            }
-        });
-        document.addEventListener("change", function(e) {
-            const t = e.target;
-            if (t.matches && (
-                t.matches("#fertigungMode input, #fertigungMode select, #fertigungMode textarea") ||
-                t.matches("#wareneingangMode input, #wareneingangMode select, #wareneingangMode textarea") ||
-                t.matches("#stammdatenMode input, #stammdatenMode select, #stammdatenMode textarea")
-            )) {
-                markUnsaved();
-            }
-        });
+        // Exclude navigation selects and non-form inputs from triggering unsaved
+        const _navSelectors = '#sdArtikelSelect, #weArtikelSelect, #fertAuftragSelect, #artikelSelect, #lieferantSelect, #weStückzahlInput';
+        function _isFormChange(t) {
+            if (!t.matches) return false;
+            if (t.matches(_navSelectors)) return false;
+            // Only track inputs inside actual edit forms
+            return t.matches(".artikel-form input, .artikel-form select, .artikel-form textarea") ||
+                   t.matches("#taktInput, #manualInput") ||
+                   t.matches(".we-edit-fields input, .we-edit-fields select, .we-edit-fields textarea") ||
+                   t.matches(".preset-form input, .preset-form select, .preset-form textarea");
+        }
+        document.addEventListener("input", function(e) { if (_isFormChange(e.target)) markUnsaved(); });
+        document.addEventListener("change", function(e) { if (_isFormChange(e.target)) markUnsaved(); });
     </script>
 
     <!-- Drawing Review Overlay -->
@@ -5355,6 +5434,26 @@
     <div class="save-toast" id="saveToast">
         <span class="toast-icon">&#10003;</span>
         <span id="saveToastMsg">Gespeichert</span>
+    </div>
+
+    <!-- NOK Grund Dialog -->
+    <div class="unsaved-overlay" id="nokGrundOverlay">
+        <div class="unsaved-dialog" style="max-width:440px">
+            <h3>&#10007; NOK – Grund angeben</h3>
+            <p id="nokGrundLabel" style="font-size:0.9rem;color:#666;margin-bottom:12px"></p>
+            <textarea id="nokGrundText" rows="3" placeholder="Sperrgrund / Mangelbeschreibung..."
+                style="width:100%;border:1.5px solid #ccc;border-radius:8px;padding:10px;font-size:0.95rem;resize:vertical;box-sizing:border-box"></textarea>
+            <div style="margin-top:10px">
+                <label style="font-size:0.9rem;font-weight:600;display:block;margin-bottom:6px">Foto (optional)</label>
+                <input type="file" id="nokFotoInput" accept="image/*" capture="environment"
+                    style="font-size:0.9rem">
+                <div id="nokFotoPreview" style="margin-top:8px"></div>
+            </div>
+            <div class="btn-row" style="margin-top:16px">
+                <button class="btn-cancel" onclick="nokGrundCancel()">Abbrechen</button>
+                <button class="btn-discard" style="background:var(--danger);border-color:var(--danger);color:#fff" onclick="nokGrundConfirm()">NOK bestätigen</button>
+            </div>
+        </div>
     </div>
 
     <!-- Unsaved Changes Dialog -->
