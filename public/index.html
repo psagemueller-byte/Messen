@@ -881,6 +881,7 @@
                 <select id="artikelSelect">
                     <option value="">– Artikel wählen –</option>
                 </select>
+                <input type="text" id="auftragNrInput" placeholder="Fertigungsauftragsnr. eingeben" style="width:200px;padding:6px 10px;border:1.5px solid #ccc;border-radius:6px;font-size:.95rem">
                 <button class="primary" onclick="createFertigungsauftrag()">Fertigungsauftrag erstellen</button>
                 <button onclick="toggleArtikelForm('new')">+ Neu</button>
                 <button onclick="toggleArtikelForm('edit')">Bearbeiten</button>
@@ -1748,12 +1749,6 @@
         }
 
         // --- Fertigungsauftrag ---
-        function generateAuftragNr() {
-            const now = new Date();
-            const pad = (n, l=2) => String(n).padStart(l, "0");
-            return `FA-${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-        }
-
         async function createFertigungsauftrag() {
             const sel = document.getElementById("artikelSelect");
             if (!sel.value) { alert("Bitte zuerst einen Artikel auswählen."); return; }
@@ -1765,7 +1760,9 @@
             }
 
             const art = artikelList.find(a => a.id === parseInt(sel.value));
-            const auftragNr = generateAuftragNr();
+            const auftragNrField = document.getElementById("auftragNrInput");
+            const auftragNr = auftragNrField.value.trim();
+            if (!auftragNr) { alert("Bitte eine Fertigungsauftragsnummer eingeben."); auftragNrField.focus(); return; }
 
             try {
                 const { data, error } = await sb.from("fertigungsauftrag").insert({
@@ -1780,6 +1777,7 @@
                 outOfToleranceConfirmed.clear();
                 partCount = 0;
                 document.getElementById("partCount").textContent = "0";
+                auftragNrField.value = "";
 
                 // Load the article (Messplan + Zeichnung)
                 await loadSelectedArtikel();
