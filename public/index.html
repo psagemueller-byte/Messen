@@ -1796,19 +1796,32 @@
         <div id="wareneingangMode" style="display:none">
         <button class="mode-back-btn" onclick="selectMode(null)">&#8592; Zurück zur Auswahl</button>
 
-        <div class="we-artikel-panel">
-            <h2>Wareneingang – Prüfung</h2>
+        <div class="we-artikel-panel" id="weAuftragForm">
+            <h2>Wareneingang – Neuer Prüfauftrag</h2>
             <div class="artikel-select-row">
                 <select id="weArtikelSelect">
                     <option value="">– Artikel wählen –</option>
                 </select>
-                <button class="primary" onclick="weLoadArtikel()">Artikel laden</button>
             </div>
             <div class="artikel-select-row" style="margin-top:8px">
                 <select id="weLieferantSelect">
                     <option value="">– Lieferant wählen –</option>
                 </select>
                 <input type="text" id="weLieferscheinNr" placeholder="Lieferscheinnummer" style="flex:1;padding:8px 12px;border:1px solid #ccc;border-radius:6px;font-size:1rem;">
+            </div>
+            <div style="margin-top:12px">
+                <button class="primary" onclick="weCreatePruefauftrag()" style="width:100%;padding:12px;font-size:1.05rem">Prüfauftrag erstellen</button>
+            </div>
+        </div>
+
+        <!-- Active Prüfauftrag Header (shown after creation) -->
+        <div id="weAuftragHeader" style="display:none;background:#e8f5e9;border:1.5px solid #4caf50;border-radius:10px;padding:14px 20px;margin-bottom:16px">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+                <div>
+                    <div style="font-size:1.15rem;font-weight:700;color:#2e7d32" id="weAuftragNrDisplay"></div>
+                    <div style="font-size:0.9rem;color:#555;margin-top:2px" id="weAuftragInfoDisplay"></div>
+                </div>
+                <div style="font-size:0.85rem;color:#666" id="weAuftragDatumDisplay"></div>
             </div>
         </div>
 
@@ -4125,16 +4138,86 @@
             }
         }
 
-        async function weLoadArtikel() {
+        let weCurrentPruefauftragId = null;
+        let weCurrentPruefauftragNr = null;
+
+        function weGeneratePruefauftragNr() {
+            const now = new Date();
+            const y = now.getFullYear();
+            const m = String(now.getMonth() + 1).padStart(2, '0');
+            const d = String(now.getDate()).padStart(2, '0');
+            const hh = String(now.getHours()).padStart(2, '0');
+            const mm = String(now.getMinutes()).padStart(2, '0');
+            const ss = String(now.getSeconds()).padStart(2, '0');
+            return `PA-${y}${m}${d}-${hh}${mm}${ss}`;
+        }
+
+        async function weCreatePruefauftrag() {
             const sel = document.getElementById("weArtikelSelect");
             if (!sel.value) { alert("Bitte zuerst einen Artikel wählen."); return; }
             const art = artikelList.find(a => a.id === parseInt(sel.value));
             if (!art) return;
 
-            weCurrentArtikelId = art.id;
-            document.getElementById("headerInfo").textContent = `${art.artikel_nr} – ${art.bezeichnung}`;
+            const lieferant = document.getElementById("weLieferantSelect").value;
+            const lieferscheinNr = document.getElementById("weLieferscheinNr").value.trim();
+
+            if (!lieferant) { alert("Bitte einen Lieferanten wählen."); return; }
+
+            // Generate unique Prüfauftrag number
+            const paNr = weGeneratePruefauftragNr();
+
+            if (!sb) return;
+
+            try {
+                // Create the Prüfauftrag in DB (status: offen)
+                const { data, error } = await sb.from("we_pruefergebnisse").insert({
+                    pruefauftrag_nr: paNr,
+                    artikel_id: art.id,
+                    lieferant,
+                    lieferschein_nr: lieferscheinNr,
+                    gesamtmenge: 1,
+                    ergebnis: 'offen',
+                    pruefpunkte: []
+                }).select().single();
+                if (error) throw error;
+
+                weCurrentPruefauftragId = data.id;
+                weCurrentPruefauftragNr = paNr;
+                weCurrentArtikelId = art.id;
+
+                // Show Prüfauftrag header
+                document.getElementById("weAuftragNrDisplay").textContent = `Prüfauftrag ${paNr}`;
+                const artLabel = `${art.artikel_nr} – ${art.bezeichnung}`;
+                const infoparts = [artLabel];
+                if (lieferant) infoparts.push(`Lieferant: ${lieferant}`);
+                if (lieferscheinNr) infoparts.push(`LS: ${lieferscheinNr}`);
+                document.getElementById("weAuftragInfoDisplay").textContent = infoparts.join(' | ');
+                const datum = new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                document.getElementById("weAuftragDatumDisplay").textContent = datum;
+                document.getElementById("weAuftragHeader").style.display = "";
+                document.getElementById("weAuftragForm").style.display = "none";
+                document.getElementById("headerInfo").textContent = `${paNr} – ${artLabel}`;
+            } catch(e) {
+                alert("Fehler beim Erstellen des Prüfauftrags: " + e.message);
+                return;
+            }
 
             // Load drawing
+            await weLoadArtikelDrawing(art);
+
+            // Load saved Pruefpunkte from Supabase
+            await weLoadPruefpunkte();
+
+            // In Wareneingang (Werker): force checklist mode
+            if (currentMode === 'wareneingang') {
+                weMode = 'check';
+                document.getElementById("weEditSidebar").style.display = "none";
+                document.getElementById("wePrueferSidebar").style.display = "";
+            }
+            weRenderAll();
+        }
+
+        async function weLoadArtikelDrawing(art) {
             if (art.zeichnung_file) {
                 try {
                     const { data: blob, error } = await sb.storage.from(BUCKET).download(art.zeichnung_file);
@@ -4153,17 +4236,25 @@
                     }
                 } catch(e) {
                     alert("Fehler beim Laden der Zeichnung: " + e.message);
-                    return;
                 }
             } else {
-                alert("Dieser Artikel hat keine Zeichnung hinterlegt. Bitte zuerst eine Zeichnung im Artikel speichern.");
-                return;
+                alert("Dieser Artikel hat keine Zeichnung hinterlegt.");
             }
+        }
 
-            // Load saved Pruefpunkte from Supabase
+        async function weLoadArtikel() {
+            // Used by Stammdaten WE-Konfigurator (not worker mode)
+            const sel = document.getElementById("weArtikelSelect");
+            if (!sel.value) { alert("Bitte zuerst einen Artikel wählen."); return; }
+            const art = artikelList.find(a => a.id === parseInt(sel.value));
+            if (!art) return;
+
+            weCurrentArtikelId = art.id;
+            document.getElementById("headerInfo").textContent = `${art.artikel_nr} – ${art.bezeichnung}`;
+
+            await weLoadArtikelDrawing(art);
             await weLoadPruefpunkte();
 
-            // In Wareneingang (Werker): force checklist mode
             if (currentMode === 'wareneingang') {
                 weMode = 'check';
                 document.getElementById("weEditSidebar").style.display = "none";
@@ -4717,11 +4808,10 @@
         }
 
         async function weFinishPruefung() {
-            // Pflichtfelder: Lieferant + Lieferscheinnummer
-            const lieferant = document.getElementById("weLieferantSelect").value;
-            const lieferscheinNr = document.getElementById("weLieferscheinNr").value.trim();
-            if (!lieferant) { alert("Bitte einen Lieferanten auswählen."); return; }
-            if (!lieferscheinNr) { alert("Bitte eine Lieferscheinnummer eingeben."); return; }
+            if (!weCurrentPruefauftragId) {
+                alert("Kein aktiver Prüfauftrag. Bitte zuerst einen Prüfauftrag erstellen.");
+                return;
+            }
 
             const total = wePruefpunkte.length;
             if (wePunktStatus.size < total) {
@@ -4750,20 +4840,13 @@
             if (!sb || !weCurrentArtikelId) return;
 
             try {
-                // Save result
-                const { error: insErr } = await sb.from("we_pruefergebnisse").insert({
-                    artikel_id: weCurrentArtikelId,
-                    lieferant,
-                    lieferschein_nr: lieferscheinNr,
+                // Update the existing Prüfauftrag with results
+                const { error: updErr } = await sb.from("we_pruefergebnisse").update({
                     gesamtmenge: gesamt,
                     ergebnis,
                     pruefpunkte: punkte
-                });
-                if (insErr) throw insErr;
-
-                // Note: Article is NOT automatically locked.
-                // Locked articles are managed manually via Stammdaten.
-                // NOK results appear in WE-Freigabe for review.
+                }).eq("id", weCurrentPruefauftragId);
+                if (updErr) throw updErr;
 
                 // Reset for next check
                 weResetForNewAuftrag(ergebnis);
@@ -4773,11 +4856,15 @@
         }
 
         function weResetForNewAuftrag(ergebnis) {
+            const paNr = weCurrentPruefauftragNr;
+
             // Clear state
             wePunktStatus.clear();
             weNokReasons.clear();
             wePruefpunkte = [];
             weCurrentArtikelId = null;
+            weCurrentPruefauftragId = null;
+            weCurrentPruefauftragNr = null;
 
             // Reset form fields
             document.getElementById("weArtikelSelect").value = "";
@@ -4785,14 +4872,16 @@
             document.getElementById("weLieferscheinNr").value = "";
             document.getElementById("weGesamtmenge").value = "1";
 
-            // Hide work area
+            // Hide work area + Prüfauftrag header, show form again
             document.getElementById("weWorkArea").style.display = "none";
+            document.getElementById("weAuftragHeader").style.display = "none";
+            document.getElementById("weAuftragForm").style.display = "";
             document.getElementById("weDrawingImg").src = "";
             document.getElementById("weDrawingStatus").textContent = "";
             document.getElementById("headerInfo").textContent = "";
 
-            // Show confirmation with ready-state
-            const panel = document.querySelector(".we-artikel-panel");
+            // Show confirmation banner
+            const panel = document.getElementById("weAuftragForm");
             const banner = document.createElement("div");
             const isOk = ergebnis === 'freigegeben';
             banner.className = "we-reset-banner";
@@ -4803,8 +4892,8 @@
                 color: ${isOk ? '#1a7a1a' : '#b91c1c'};
                 border: 2px solid ${isOk ? '#1a7a1a' : '#b91c1c'};
             `;
-            banner.innerHTML = `${isOk ? '&#10003; FREIGEGEBEN' : '&#10007; GESPERRT – Mängel festgestellt'} – Ergebnis gespeichert.<br>
-                <span style="font-weight:400;font-size:0.95rem;color:#333">${isOk ? 'Bereit für neuen Auftrag – bitte Artikel wählen.' : 'Prüfauftrag gesperrt. Freigabe unter Stammdaten → WE-Freigabe.'}</span>`;
+            banner.innerHTML = `${paNr}: ${isOk ? '&#10003; FREIGEGEBEN' : '&#10007; GESPERRT'}<br>
+                <span style="font-weight:400;font-size:0.95rem;color:#333">${isOk ? 'Bereit für neuen Prüfauftrag.' : 'Prüfauftrag gesperrt. Freigabe unter Stammdaten → WE-Freigabe.'}</span>`;
             // Remove previous banner if exists
             const old = panel.querySelector(".we-reset-banner");
             if (old) old.remove();
@@ -5229,9 +5318,12 @@
                 const lieferantLabel = fg.lieferant ? `Lieferant: ${fg.lieferant}` : '';
                 const lsLabel = fg.lieferschein_nr ? `LS-Nr: ${fg.lieferschein_nr}` : '';
 
+                const paNr = fg.pruefauftrag_nr || '';
+
                 html += `<div class="freigabe-card">
                     <div class="freigabe-card-header">
                         <div>
+                            ${paNr ? `<div style="font-size:0.8rem;font-weight:700;color:#1565c0;margin-bottom:2px">${paNr}</div>` : ''}
                             <div class="freigabe-card-title">${artLabel}</div>
                             <div style="font-size:0.85rem;color:#555;margin-top:2px">
                                 ${lieferantLabel}${lieferantLabel && lsLabel ? ' | ' : ''}${lsLabel} | ${fg.gesamtmenge} Stück

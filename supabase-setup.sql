@@ -155,6 +155,7 @@ CREATE POLICY "Allow public delete" ON we_preset_merkmale FOR DELETE USING (true
 -- 11. WE Prüfergebnisse (Ergebnis einer Wareneingangs-Prüfung pro Artikel)
 CREATE TABLE IF NOT EXISTS we_pruefergebnisse (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    pruefauftrag_nr TEXT NOT NULL DEFAULT '',
     artikel_id BIGINT REFERENCES artikel(id) ON DELETE CASCADE,
     pruefer TEXT DEFAULT '',
     gesamtmenge INTEGER NOT NULL DEFAULT 1,
@@ -169,3 +170,8 @@ CREATE POLICY "Allow public read" ON we_pruefergebnisse FOR SELECT USING (true);
 CREATE POLICY "Allow public insert" ON we_pruefergebnisse FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow public update" ON we_pruefergebnisse FOR UPDATE USING (true);
 CREATE POLICY "Allow public delete" ON we_pruefergebnisse FOR DELETE USING (true);
+
+-- Migration: Add pruefauftrag_nr column if missing
+ALTER TABLE we_pruefergebnisse ADD COLUMN IF NOT EXISTS pruefauftrag_nr TEXT NOT NULL DEFAULT '';
+ALTER TABLE we_pruefergebnisse ADD COLUMN IF NOT EXISTS lieferant TEXT DEFAULT '';
+ALTER TABLE we_pruefergebnisse ADD COLUMN IF NOT EXISTS lieferschein_nr TEXT DEFAULT '';
