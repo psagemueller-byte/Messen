@@ -151,3 +151,21 @@ CREATE POLICY "Allow public read" ON we_preset_merkmale FOR SELECT USING (true);
 CREATE POLICY "Allow public insert" ON we_preset_merkmale FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow public update" ON we_preset_merkmale FOR UPDATE USING (true);
 CREATE POLICY "Allow public delete" ON we_preset_merkmale FOR DELETE USING (true);
+
+-- 11. WE Prüfergebnisse (Ergebnis einer Wareneingangs-Prüfung pro Artikel)
+CREATE TABLE IF NOT EXISTS we_pruefergebnisse (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    artikel_id BIGINT REFERENCES artikel(id) ON DELETE CASCADE,
+    pruefer TEXT DEFAULT '',
+    gesamtmenge INTEGER NOT NULL DEFAULT 1,
+    ergebnis TEXT NOT NULL DEFAULT 'offen',  -- 'offen', 'freigegeben', 'gesperrt'
+    bemerkung TEXT DEFAULT '',
+    pruefpunkte JSONB DEFAULT '[]',  -- [{punkt_nr, titel, status: 'ok'|'nok'|'offen'}]
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE we_pruefergebnisse ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public read" ON we_pruefergebnisse FOR SELECT USING (true);
+CREATE POLICY "Allow public insert" ON we_pruefergebnisse FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update" ON we_pruefergebnisse FOR UPDATE USING (true);
+CREATE POLICY "Allow public delete" ON we_pruefergebnisse FOR DELETE USING (true);

@@ -1177,57 +1177,138 @@
         .we-check-header {
             display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap;
         }
-        .we-check-header h3 { margin: 0; font-size: 1.05rem; white-space: nowrap; }
+        .we-check-header h3 { margin: 0; font-size: 1.1rem; white-space: nowrap; }
         .we-check-header input[type="number"] {
-            width: 100px; padding: 6px 8px; border: 2px solid var(--border);
-            border-radius: 6px; font-size: 0.95rem;
+            width: 100px; padding: 10px 12px; border: 2px solid var(--border);
+            border-radius: 8px; font-size: 1.1rem; touch-action: manipulation;
         }
         .we-check-item {
-            border: 2px solid var(--border); border-radius: 10px;
-            padding: 12px 14px; margin-bottom: 10px; transition: all 0.2s;
+            border: 2px solid var(--border); border-radius: 12px;
+            padding: 14px 16px; margin-bottom: 12px; transition: all 0.2s;
         }
-        .we-check-item:hover { border-color: var(--primary); }
-        .we-check-item.checked { border-color: var(--success); background: #f0faf0; }
+        .we-check-item.ok { border-color: var(--success); background: #f0faf0; }
+        .we-check-item.nok { border-color: var(--danger); background: #fef0f0; }
         .we-check-item.highlighted { border-color: var(--warning); background: #fff8e1; }
         .we-check-top {
-            display: flex; align-items: center; gap: 10px;
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
         }
-        .we-check-top input[type="checkbox"] {
-            width: 20px; height: 20px; flex-shrink: 0; cursor: pointer; accent-color: var(--success);
+        /* OK/NOK verdict buttons (touch-friendly) */
+        .we-verdict-btns {
+            display: flex; gap: 6px; flex-shrink: 0;
+        }
+        .we-verdict-btn {
+            min-width: 56px; min-height: 48px; border: 2px solid var(--border);
+            border-radius: 10px; font-size: 1rem; font-weight: 700;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            gap: 4px; padding: 6px 12px; background: white;
+            touch-action: manipulation; transition: all 0.15s;
+            -webkit-tap-highlight-color: transparent; user-select: none;
+        }
+        .we-verdict-btn:active { transform: scale(0.95); }
+        .we-verdict-btn.ok-btn { color: var(--success); }
+        .we-verdict-btn.ok-btn:hover, .we-verdict-btn.ok-btn.active {
+            background: var(--success); color: white; border-color: var(--success);
+        }
+        .we-verdict-btn.nok-btn { color: var(--danger); }
+        .we-verdict-btn.nok-btn:hover, .we-verdict-btn.nok-btn.active {
+            background: var(--danger); color: white; border-color: var(--danger);
         }
         .we-check-nr {
-            min-width: 30px; height: 30px; border-radius: 50%;
+            min-width: 34px; height: 34px; border-radius: 50%;
             background: var(--primary); color: white; display: flex;
             align-items: center; justify-content: center;
-            font-weight: 700; font-size: 0.8rem; flex-shrink: 0;
+            font-weight: 700; font-size: 0.85rem; flex-shrink: 0;
         }
-        .we-check-item.checked .we-check-nr { background: var(--success); }
-        .we-check-title { font-weight: 600; font-size: 0.95rem; flex: 1; }
+        .we-check-item.ok .we-check-nr { background: var(--success); }
+        .we-check-item.nok .we-check-nr { background: var(--danger); }
+        .we-check-title { font-weight: 600; font-size: 1rem; flex: 1; min-width: 0; }
         .we-check-menge {
             font-size: 0.85rem; font-weight: 600; color: var(--primary);
-            white-space: nowrap; padding: 3px 10px;
+            white-space: nowrap; padding: 4px 12px;
             background: #e8f0fe; border-radius: 12px;
         }
-        .we-check-item.checked .we-check-menge { background: #e0f5e0; color: var(--success); }
+        .we-check-item.ok .we-check-menge { background: #e0f5e0; color: var(--success); }
+        .we-check-item.nok .we-check-menge { background: #fde0e0; color: var(--danger); }
         .we-check-body {
-            margin-top: 8px; padding-left: 60px; font-size: 0.85rem; color: #555;
+            margin-top: 10px; padding-left: 0; font-size: 0.9rem; color: #555;
         }
-        .we-check-body details { margin-bottom: 6px; }
-        .we-check-body summary { cursor: pointer; font-weight: 600; color: #444; }
+        .we-check-body details { margin-bottom: 8px; }
+        .we-check-body summary {
+            cursor: pointer; font-weight: 600; color: #444;
+            min-height: 48px; display: flex; align-items: center;
+            touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+        }
         .we-check-body .we-check-fotos {
-            display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px;
+            display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;
         }
         .we-check-body .we-check-fotos img {
-            width: 64px; height: 64px; object-fit: cover;
-            border-radius: 6px; border: 2px solid var(--border); cursor: pointer;
+            width: 80px; height: 80px; object-fit: cover;
+            border-radius: 8px; border: 2px solid var(--border); cursor: pointer;
+            touch-action: manipulation;
         }
         .we-check-body .we-check-fotos img:hover { border-color: var(--primary); }
+        /* Progress bar */
         .we-check-progress {
-            margin-top: 14px; padding: 10px 14px;
-            background: #f5f5f5; border-radius: 8px;
-            font-size: 0.9rem; font-weight: 600; text-align: center;
+            margin-top: 16px; padding: 12px 16px;
+            background: #f5f5f5; border-radius: 10px;
+            font-size: 0.95rem; font-weight: 600; text-align: center;
         }
         .we-check-progress.done { background: #e0f5e0; color: var(--success); }
+        .we-check-progress.has-nok { background: #fde0e0; color: var(--danger); }
+        .we-check-progress-bar {
+            height: 8px; background: #e0e0e0; border-radius: 4px;
+            margin-top: 8px; overflow: hidden;
+        }
+        .we-check-progress-fill {
+            height: 100%; border-radius: 4px; transition: width 0.3s;
+            background: var(--primary);
+        }
+        .we-check-progress-fill.all-ok { background: var(--success); }
+        .we-check-progress-fill.has-nok { background: var(--danger); }
+        /* Finish button */
+        .we-finish-btn {
+            width: 100%; margin-top: 12px; padding: 14px 20px;
+            font-size: 1.05rem; font-weight: 700; border: none;
+            border-radius: 10px; cursor: pointer;
+            background: var(--primary); color: white;
+            touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+            transition: all 0.15s; min-height: 52px;
+        }
+        .we-finish-btn:disabled {
+            background: #ccc; color: #888; cursor: not-allowed;
+        }
+        .we-finish-btn:not(:disabled):active { transform: scale(0.97); }
+        /* Freigabe-Übersicht */
+        .freigabe-card {
+            background: var(--card); border: 2px solid var(--border);
+            border-radius: 12px; padding: 16px; margin-bottom: 14px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+        .freigabe-card-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 10px; flex-wrap: wrap; gap: 8px;
+        }
+        .freigabe-card-title { font-weight: 700; font-size: 1rem; }
+        .freigabe-card-date { font-size: 0.8rem; color: #888; }
+        .freigabe-punkt {
+            display: flex; align-items: center; gap: 8px;
+            padding: 6px 0; font-size: 0.9rem;
+        }
+        .freigabe-punkt-ok { color: var(--success); font-weight: 700; }
+        .freigabe-punkt-nok { color: var(--danger); font-weight: 700; }
+        .freigabe-actions {
+            display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap;
+        }
+        .freigabe-actions button {
+            padding: 10px 20px; font-size: 0.95rem; font-weight: 600;
+            border: 2px solid var(--border); border-radius: 10px;
+            cursor: pointer; min-height: 48px; touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .freigabe-actions button.primary {
+            background: var(--success); color: white; border-color: var(--success);
+        }
+        .freigabe-actions button.secondary { background: white; }
 
         /* WE Foto Lightbox */
         .we-lightbox {
@@ -1763,6 +1844,7 @@
                 <div class="sd-tab active" onclick="sdSwitchTab('zeichnung')">Zeichnung sichten</div>
                 <div class="sd-tab" onclick="sdSwitchTab('wepruef')">WE-Prüfpunkte</div>
                 <div class="sd-tab" onclick="sdSwitchTab('presets')">Prüf-Presets</div>
+                <div class="sd-tab" onclick="sdSwitchTab('freigabe')">WE-Freigabe</div>
             </div>
             <div class="sd-tab-content active" id="sdTabZeichnung">
                 <button class="primary" onclick="openDrawingReview()" id="sdReviewDrawingBtn">Zeichnung und Messpunkte prüfen</button>
@@ -1857,6 +1939,15 @@
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- WE-Freigabe Tab -->
+            <div class="sd-tab-content" id="sdTabFreigabe">
+                <h3 style="margin:0 0 16px 0">Gesperrte Artikel zur Freigabe</h3>
+                <div id="freigabeListItems"></div>
+                <div id="freigabeListEmpty" style="color:#999;font-size:0.9rem;text-align:center;padding:24px">
+                    Keine gesperrten Prüfergebnisse vorhanden.
                 </div>
             </div>
         </div>
@@ -3856,12 +3947,14 @@
                 t.classList.toggle("active",
                     (tab === "zeichnung" && i === 0) ||
                     (tab === "wepruef" && i === 1) ||
-                    (tab === "presets" && i === 2)
+                    (tab === "presets" && i === 2) ||
+                    (tab === "freigabe" && i === 3)
                 );
             });
             document.getElementById("sdTabZeichnung").classList.toggle("active", tab === "zeichnung");
             document.getElementById("sdTabWEPruef").classList.toggle("active", tab === "wepruef");
             document.getElementById("sdTabPresets").classList.toggle("active", tab === "presets");
+            document.getElementById("sdTabFreigabe").classList.toggle("active", tab === "freigabe");
 
             // Move the shared WE work area into the active tab content
             const weWork = document.getElementById("weWorkArea");
@@ -3880,6 +3973,9 @@
             if (tab === "presets") {
                 loadPresets();
             }
+            if (tab === "freigabe") {
+                loadFreigabeListe();
+            }
         }
 
         // Set initial state
@@ -3894,7 +3990,7 @@
         let weCurrentArtikelId = null;
         let weNextNr = 1;
         let weMode = 'edit'; // 'edit' | 'check'
-        let weCheckedPunkte = new Set();
+        let wePunktStatus = new Map(); // index → 'ok'|'nok'  (absent = offen)
 
         function wePopulateArtikelSelect() {
             const sel = document.getElementById("weArtikelSelect");
@@ -4052,9 +4148,12 @@
                 const p = wePruefpunkte[i];
                 const marker = document.createElement("div");
                 marker.className = `we-marker ${p.form}`;
-                if (isCheck && weCheckedPunkte.has(i)) {
+                if (isCheck && wePunktStatus.get(i) === 'ok') {
                     marker.style.borderColor = 'var(--success)';
                     marker.style.background = 'rgba(76,175,80,0.18)';
+                } else if (isCheck && wePunktStatus.get(i) === 'nok') {
+                    marker.style.borderColor = 'var(--danger)';
+                    marker.style.background = 'rgba(244,67,54,0.18)';
                 } else if (i === weSelectedPunktIdx) {
                     marker.classList.add("active");
                 }
@@ -4319,7 +4418,7 @@
                 editSidebar.style.display = 'none';
                 checkSidebar.style.display = '';
                 weCancelPlacement();
-                weCheckedPunkte.clear();
+                wePunktStatus.clear();
             }
 
             weSelectedPunktIdx = null;
@@ -4337,24 +4436,31 @@
             const container = document.getElementById("weChecklistItems");
             const gesamt = parseInt(document.getElementById("weGesamtmenge").value) || 1;
             const total = wePruefpunkte.length;
-            const checked = weCheckedPunkte.size;
+            const rated = wePunktStatus.size;
+            const hasNok = [...wePunktStatus.values()].some(v => v === 'nok');
+            const allOk = rated === total && !hasNok;
 
             if (total === 0) {
                 container.innerHTML = '<div style="color:#999;text-align:center;padding:20px">Keine Prüfpunkte vorhanden.</div>';
-                document.getElementById("weCheckProgress").textContent = '';
+                document.getElementById("weCheckProgress").innerHTML = '';
                 return;
             }
 
             let html = '';
             for (let i = 0; i < wePruefpunkte.length; i++) {
                 const p = wePruefpunkte[i];
-                const isChecked = weCheckedPunkte.has(i);
+                const status = wePunktStatus.get(i) || 'offen';
                 const menge = weCalcPruefmenge(p, gesamt);
-                const cls = isChecked ? 'we-check-item checked' : 'we-check-item';
+                const cls = `we-check-item ${status === 'ok' ? 'ok' : status === 'nok' ? 'nok' : ''}`;
 
                 html += `<div class="${cls}" id="weCheckItem${i}">
                     <div class="we-check-top">
-                        <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="weToggleCheck(${i}, this.checked)">
+                        <div class="we-verdict-btns">
+                            <button class="we-verdict-btn ok-btn${status === 'ok' ? ' active' : ''}"
+                                onclick="weSetVerdict(${i},'ok')" aria-label="OK">&#10003;</button>
+                            <button class="we-verdict-btn nok-btn${status === 'nok' ? ' active' : ''}"
+                                onclick="weSetVerdict(${i},'nok')" aria-label="NOK">&#10007;</button>
+                        </div>
                         <div class="we-check-nr">${p.nr}</div>
                         <div class="we-check-title">${p.titel || 'Prüfpunkt ' + p.nr}</div>
                         <div class="we-check-menge">${menge} Stk. prüfen</div>
@@ -4363,8 +4469,8 @@
 
                 if (p.anweisung) {
                     html += `<details>
-                        <summary>Prüfanweisung</summary>
-                        <p style="margin:6px 0 0;white-space:pre-wrap">${p.anweisung}</p>
+                        <summary>&#9654; Prüfanweisung</summary>
+                        <p style="margin:8px 0 0;white-space:pre-wrap">${p.anweisung}</p>
                     </details>`;
                 }
 
@@ -4380,19 +4486,35 @@
             }
             container.innerHTML = html;
 
+            // Progress bar
             const prog = document.getElementById("weCheckProgress");
-            if (checked >= total) {
-                prog.className = 'we-check-progress done';
-                prog.textContent = `Alle ${total} Prüfpunkte erledigt`;
+            const pct = total > 0 ? Math.round(rated / total * 100) : 0;
+            const fillCls = allOk ? 'all-ok' : hasNok ? 'has-nok' : '';
+            const progCls = rated >= total ? (allOk ? 'done' : 'has-nok') : '';
+
+            let progHtml = `<div class="we-check-progress ${progCls}">`;
+            if (rated >= total && allOk) {
+                progHtml += `Alle ${total} Prüfpunkte OK`;
+            } else if (rated >= total && hasNok) {
+                const nokCount = [...wePunktStatus.values()].filter(v => v === 'nok').length;
+                progHtml += `${nokCount} von ${total} Prüfpunkt(en) NOK`;
             } else {
-                prog.className = 'we-check-progress';
-                prog.textContent = `${checked} von ${total} Prüfpunkten erledigt`;
+                progHtml += `${rated} von ${total} Prüfpunkten bewertet`;
             }
+            progHtml += `<div class="we-check-progress-bar"><div class="we-check-progress-fill ${fillCls}" style="width:${pct}%"></div></div>`;
+            progHtml += `</div>`;
+            progHtml += `<button class="we-finish-btn" onclick="weFinishPruefung()" ${rated < total ? 'disabled' : ''}>
+                Prüfung abschließen</button>`;
+            prog.innerHTML = progHtml;
         }
 
-        function weToggleCheck(idx, checked) {
-            if (checked) weCheckedPunkte.add(idx);
-            else weCheckedPunkte.delete(idx);
+        function weSetVerdict(idx, verdict) {
+            const current = wePunktStatus.get(idx);
+            if (current === verdict) {
+                wePunktStatus.delete(idx); // toggle off → offen
+            } else {
+                wePunktStatus.set(idx, verdict);
+            }
             weRenderAll();
         }
 
@@ -4401,6 +4523,55 @@
             if (!src) return;
             document.getElementById("weLightboxImg").src = src;
             document.getElementById("weLightbox").classList.add("active");
+        }
+
+        async function weFinishPruefung() {
+            const total = wePruefpunkte.length;
+            if (wePunktStatus.size < total) {
+                alert("Bitte alle Prüfpunkte bewerten.");
+                return;
+            }
+            const hasNok = [...wePunktStatus.values()].some(v => v === 'nok');
+            const ergebnis = hasNok ? 'gesperrt' : 'freigegeben';
+            const gesamt = parseInt(document.getElementById("weGesamtmenge").value) || 1;
+
+            // Build pruefpunkte summary
+            const punkte = wePruefpunkte.map((p, i) => ({
+                punkt_nr: p.nr,
+                titel: p.titel || 'Prüfpunkt ' + p.nr,
+                status: wePunktStatus.get(i) || 'offen'
+            }));
+
+            if (!sb || !weCurrentArtikelId) return;
+
+            try {
+                // Save result
+                const { error: insErr } = await sb.from("we_pruefergebnisse").insert({
+                    artikel_id: weCurrentArtikelId,
+                    gesamtmenge: gesamt,
+                    ergebnis,
+                    pruefpunkte: punkte
+                });
+                if (insErr) throw insErr;
+
+                if (hasNok) {
+                    // Block article
+                    await sb.from("artikel").update({ gesperrt: true }).eq("id", weCurrentArtikelId);
+                    // Update local list
+                    const art = artikelList.find(a => a.id === weCurrentArtikelId);
+                    if (art) art.gesperrt = true;
+
+                    alert("GESPERRT: Mindestens ein Prüfpunkt ist NOK.\nDer Artikel wurde gesperrt und ist in der Freigabe-Übersicht sichtbar.");
+                } else {
+                    alert("FREIGEGEBEN: Alle Prüfpunkte OK.\nDer Artikel ist freigegeben.");
+                }
+
+                // Reset for next check
+                wePunktStatus.clear();
+                weRenderAll();
+            } catch(e) {
+                alert("Fehler beim Speichern: " + e.message);
+            }
         }
 
         // Live-update checklist when Gesamtmenge changes
@@ -4775,6 +4946,97 @@
                 dd.innerHTML = html;
             }
             dd.classList.add("open");
+        }
+
+        // =============================================
+        // WE-Freigabe Übersicht (Stammdaten)
+        // =============================================
+        let freigabeListe = [];
+
+        async function loadFreigabeListe() {
+            if (!sb) return;
+            try {
+                const { data, error } = await sb.from("we_pruefergebnisse")
+                    .select("*, artikel(artikel_nr, bezeichnung, version, gesperrt)")
+                    .eq("ergebnis", "gesperrt")
+                    .order("created_at", { ascending: false });
+                if (error) throw error;
+                freigabeListe = data || [];
+            } catch(e) {
+                console.error("Freigabe-Liste laden:", e);
+                freigabeListe = [];
+            }
+            renderFreigabeListe();
+        }
+
+        function renderFreigabeListe() {
+            const container = document.getElementById("freigabeListItems");
+            const empty = document.getElementById("freigabeListEmpty");
+            if (!container) return;
+
+            if (freigabeListe.length === 0) {
+                container.innerHTML = "";
+                empty.style.display = "";
+                return;
+            }
+            empty.style.display = "none";
+
+            let html = "";
+            for (const fg of freigabeListe) {
+                const art = fg.artikel;
+                const artLabel = art ? `${art.artikel_nr} – ${art.bezeichnung}${art.version ? ` (V${art.version})` : ""}` : `Artikel #${fg.artikel_id}`;
+                const datum = new Date(fg.created_at).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+                const punkte = fg.pruefpunkte || [];
+
+                html += `<div class="freigabe-card">
+                    <div class="freigabe-card-header">
+                        <div class="freigabe-card-title">${artLabel}</div>
+                        <div class="freigabe-card-date">${datum}</div>
+                    </div>
+                    <div>Gesamtmenge: ${fg.gesamtmenge} Stück</div>`;
+
+                for (const pp of punkte) {
+                    const icon = pp.status === 'ok'
+                        ? '<span class="freigabe-punkt-ok">&#10003; OK</span>'
+                        : pp.status === 'nok'
+                            ? '<span class="freigabe-punkt-nok">&#10007; NOK</span>'
+                            : '<span style="color:#888">— offen</span>';
+                    html += `<div class="freigabe-punkt">
+                        Punkt ${pp.punkt_nr}: ${pp.titel} &rarr; ${icon}
+                    </div>`;
+                }
+
+                html += `<div class="freigabe-actions">
+                    <button class="primary" onclick="freigabeFreigeben(${fg.id}, ${fg.artikel_id})">Trotzdem freigeben</button>
+                    <button class="secondary" onclick="freigabeAbschliessen(${fg.id})">Abgeschlossen (gesperrt lassen)</button>
+                </div></div>`;
+            }
+            container.innerHTML = html;
+        }
+
+        async function freigabeFreigeben(ergebnisId, artikelId) {
+            if (!confirm("Artikel trotz NOK-Bewertungen freigeben?")) return;
+            if (!sb) return;
+            try {
+                await sb.from("we_pruefergebnisse").update({ ergebnis: "freigegeben" }).eq("id", ergebnisId);
+                await sb.from("artikel").update({ gesperrt: false }).eq("id", artikelId);
+                const art = artikelList.find(a => a.id === artikelId);
+                if (art) art.gesperrt = false;
+                await loadFreigabeListe();
+                alert("Artikel wurde freigegeben.");
+            } catch(e) {
+                alert("Fehler: " + e.message);
+            }
+        }
+
+        async function freigabeAbschliessen(ergebnisId) {
+            if (!sb) return;
+            try {
+                await sb.from("we_pruefergebnisse").update({ ergebnis: "abgeschlossen_gesperrt" }).eq("id", ergebnisId);
+                await loadFreigabeListe();
+            } catch(e) {
+                alert("Fehler: " + e.message);
+            }
         }
 
         async function weApplyPreset(presetId) {
