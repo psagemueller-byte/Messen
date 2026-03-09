@@ -1318,6 +1318,126 @@
         .sd-tab-content { display: none; }
         .sd-tab-content.active { display: block; }
 
+        /* Prüf-Presets Layout */
+        .preset-layout {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+        }
+        .preset-list-panel {
+            flex: 0 0 320px;
+            background: var(--card);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .preset-detail-panel {
+            flex: 1 1 0;
+            min-width: 0;
+            background: var(--card);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .preset-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+            font-size: 0.9rem;
+        }
+        .preset-item:hover { border-color: var(--primary); background: #f0f4ff; }
+        .preset-item.active { border-color: var(--warning); background: #fff8e1; }
+        .preset-item-name { font-weight: 600; }
+        .preset-item-desc { font-size: 0.8rem; color: #666; margin-top: 2px; }
+        .preset-item-count {
+            margin-left: auto;
+            background: var(--primary);
+            color: white;
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 10px;
+            flex-shrink: 0;
+        }
+
+        /* Preset Merkmal-Karten */
+        .preset-merkmal-card {
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            transition: all 0.15s;
+        }
+        .preset-merkmal-card:hover { border-color: var(--primary); }
+        .preset-merkmal-nr {
+            min-width: 28px; height: 28px;
+            border-radius: 50%; background: var(--primary); color: white;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 0.8rem; flex-shrink: 0;
+        }
+        .preset-merkmal-info { flex: 1; min-width: 0; }
+        .preset-merkmal-title { font-weight: 600; font-size: 0.9rem; }
+        .preset-merkmal-meta { font-size: 0.8rem; color: #666; margin-top: 2px; }
+        .preset-merkmal-actions { display: flex; gap: 4px; flex-shrink: 0; }
+        .preset-merkmal-actions button {
+            padding: 4px 8px; font-size: 0.75rem; border: 1px solid var(--border);
+            border-radius: 4px; background: white; cursor: pointer;
+        }
+        .preset-merkmal-actions button:hover { background: #f0f0f0; }
+        .preset-merkmal-actions button.danger { color: var(--danger); border-color: var(--danger); }
+
+        /* Preset Merkmal Edit */
+        .preset-merkmal-edit {
+            border: 2px solid var(--primary);
+            border-radius: 8px;
+            padding: 14px;
+            margin-top: 12px;
+            background: #f8faff;
+        }
+
+        /* Preset Dropdown (Anwenden im WE-Tab) */
+        .preset-dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            z-index: 100;
+            background: var(--card);
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+            min-width: 280px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .preset-dropdown.open { display: block; }
+        .preset-dropdown-item {
+            padding: 10px 14px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.9rem;
+            transition: background 0.1s;
+        }
+        .preset-dropdown-item:last-child { border-bottom: none; }
+        .preset-dropdown-item:hover { background: #f0f4ff; }
+        .preset-dropdown-item-name { font-weight: 600; }
+        .preset-dropdown-item-desc { font-size: 0.8rem; color: #666; }
+        .preset-dropdown-empty {
+            padding: 16px;
+            text-align: center;
+            color: #999;
+            font-size: 0.85rem;
+        }
+
         /* Auftrag-Auswahl Panel (Fertigung Werker) */
         .auftrag-select-panel {
             background: var(--card); border-radius: 12px;
@@ -1642,6 +1762,7 @@
             <div class="sd-tabs">
                 <div class="sd-tab active" onclick="sdSwitchTab('zeichnung')">Zeichnung sichten</div>
                 <div class="sd-tab" onclick="sdSwitchTab('wepruef')">WE-Prüfpunkte</div>
+                <div class="sd-tab" onclick="sdSwitchTab('presets')">Prüf-Presets</div>
             </div>
             <div class="sd-tab-content active" id="sdTabZeichnung">
                 <button class="primary" onclick="openDrawingReview()" id="sdReviewDrawingBtn">Zeichnung und Messpunkte prüfen</button>
@@ -1650,9 +1771,93 @@
                 <div class="artikel-select-row" style="margin-bottom:12px">
                     <button class="we-tool-btn" onclick="weStartPlacement('circle')">+ Kreis</button>
                     <button class="we-tool-btn" onclick="weStartPlacement('rect')">+ Rechteck</button>
+                    <div style="position:relative;display:inline-block">
+                        <button class="we-tool-btn" onclick="togglePresetDropdown()" id="presetApplyBtn">Preset anwenden &#9662;</button>
+                        <div class="preset-dropdown" id="presetDropdown"></div>
+                    </div>
                     <button onclick="weSavePruefpunkte()">Prüfpunkte speichern</button>
                 </div>
                 <p style="color:#666;font-size:0.85rem">Klicke auf die Zeichnung links um Prüfpunkte zu setzen. Punkte in der Liste rechts bearbeiten.</p>
+            </div>
+
+            <!-- Prüf-Presets Tab -->
+            <div class="sd-tab-content" id="sdTabPresets">
+                <div class="preset-layout">
+                    <!-- Preset-Liste (links) -->
+                    <div class="preset-list-panel">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                            <h3 style="margin:0">Presets</h3>
+                            <button class="primary" onclick="presetCreate()" style="padding:6px 14px;font-size:0.85rem">+ Neues Preset</button>
+                        </div>
+                        <div id="presetListItems"></div>
+                        <div id="presetListEmpty" style="color:#999;font-size:0.9rem;text-align:center;padding:24px">
+                            Noch keine Presets vorhanden.<br>Erstelle ein neues Preset um Prüfmerkmale wiederzuverwenden.
+                        </div>
+                    </div>
+                    <!-- Preset-Detail (rechts) -->
+                    <div class="preset-detail-panel" id="presetDetailPanel" style="display:none">
+                        <h3 id="presetDetailTitle">Preset bearbeiten</h3>
+                        <div class="we-detail-form">
+                            <label>Name</label>
+                            <input type="text" id="presetName" placeholder="z.B. Oberflächenprüfung Standard">
+                            <label>Beschreibung</label>
+                            <input type="text" id="presetBeschreibung" placeholder="Kurze Beschreibung des Presets">
+
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;margin-bottom:8px">
+                                <h4 style="margin:0">Prüfmerkmale <span id="presetMerkmalCount" style="font-weight:400;color:#666"></span></h4>
+                                <button class="we-tool-btn" onclick="presetAddMerkmal()" style="font-size:0.8rem">+ Merkmal</button>
+                            </div>
+                            <div id="presetMerkmalList"></div>
+                            <div id="presetMerkmalEmpty" style="color:#999;font-size:0.85rem;text-align:center;padding:16px">
+                                Noch keine Prüfmerkmale. Klicke "+ Merkmal" um eines hinzuzufügen.
+                            </div>
+
+                            <!-- Merkmal-Bearbeitungs-Formular (inline, aufklappbar) -->
+                            <div class="preset-merkmal-edit" id="presetMerkmalEdit" style="display:none">
+                                <h4 id="presetMerkmalEditTitle" style="margin:0 0 8px 0">Merkmal bearbeiten</h4>
+                                <div class="form-row">
+                                    <div>
+                                        <label>Nummer</label>
+                                        <input type="text" id="pmNr" placeholder="z.B. 1, 2, A...">
+                                    </div>
+                                    <div>
+                                        <label>Form</label>
+                                        <select id="pmForm">
+                                            <option value="circle">Kreis</option>
+                                            <option value="rect">Rechteck</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <label>Bezeichnung</label>
+                                <input type="text" id="pmTitel" placeholder="z.B. Kratzerprüfung">
+                                <label>Prüfanweisung</label>
+                                <textarea id="pmAnweisung" placeholder="Was soll geprüft werden?"></textarea>
+                                <div class="form-row">
+                                    <div>
+                                        <label>Prüfanteil (%)</label>
+                                        <input type="number" id="pmProzent" min="0" max="100" value="100">
+                                    </div>
+                                    <div>
+                                        <label>Mindestprüflos</label>
+                                        <input type="number" id="pmMindest" min="1" value="1">
+                                    </div>
+                                </div>
+                                <label>Referenzfotos</label>
+                                <input type="file" id="pmFotoInput" accept="image/*" multiple style="margin-bottom:4px">
+                                <div class="we-foto-preview" id="pmFotos"></div>
+                                <div class="btn-row">
+                                    <button class="primary" onclick="presetSaveMerkmal()">Übernehmen</button>
+                                    <button onclick="presetCancelMerkmal()">Abbrechen</button>
+                                </div>
+                            </div>
+
+                            <div class="btn-row" style="margin-top:16px">
+                                <button class="primary" onclick="presetSave()">Preset speichern</button>
+                                <button class="danger" onclick="presetDelete()">Preset löschen</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -3539,6 +3744,7 @@
                 }
 
                 await weLoadPruefpunkte();
+                loadPresets(); // Load presets for dropdown (non-blocking)
                 weMode = 'edit';
                 document.getElementById("weEditSidebar").style.display = "";
                 document.getElementById("wePrueferSidebar").style.display = "none";
@@ -3647,10 +3853,15 @@
 
         function sdSwitchTab(tab) {
             document.querySelectorAll(".sd-tab").forEach((t, i) => {
-                t.classList.toggle("active", (tab === "zeichnung" && i === 0) || (tab === "wepruef" && i === 1));
+                t.classList.toggle("active",
+                    (tab === "zeichnung" && i === 0) ||
+                    (tab === "wepruef" && i === 1) ||
+                    (tab === "presets" && i === 2)
+                );
             });
             document.getElementById("sdTabZeichnung").classList.toggle("active", tab === "zeichnung");
             document.getElementById("sdTabWEPruef").classList.toggle("active", tab === "wepruef");
+            document.getElementById("sdTabPresets").classList.toggle("active", tab === "presets");
 
             // Move the shared WE work area into the active tab content
             const weWork = document.getElementById("weWorkArea");
@@ -3664,6 +3875,10 @@
             } else {
                 // Move it back to wareneingangMode
                 document.getElementById("wareneingangMode").appendChild(weWork);
+            }
+
+            if (tab === "presets") {
+                loadPresets();
             }
         }
 
@@ -4200,9 +4415,415 @@
                     document.getElementById("weLightbox").classList.remove("active");
                 } else if (wePlacementMode) {
                     weCancelPlacement();
+                } else if (document.getElementById("presetDropdown").classList.contains("open")) {
+                    document.getElementById("presetDropdown").classList.remove("open");
                 }
             }
         });
+
+        // Close preset dropdown on outside click
+        document.addEventListener("click", (e) => {
+            const dd = document.getElementById("presetDropdown");
+            const btn = document.getElementById("presetApplyBtn");
+            if (dd.classList.contains("open") && !dd.contains(e.target) && e.target !== btn) {
+                dd.classList.remove("open");
+            }
+        });
+
+        // =============================================
+        // Prüf-Presets: State & CRUD
+        // =============================================
+        let presetList = [];
+        let selectedPresetId = null;
+        let presetMerkmale = [];
+        let editingMerkmalIdx = null; // index in presetMerkmale being edited, or -1 for new
+        let presetMerkmalFotos = []; // temp fotos for merkmal being edited
+
+        async function loadPresets() {
+            if (!sb) return;
+            try {
+                const { data, error } = await sb.from("we_presets").select("*").order("name");
+                if (error) throw error;
+                presetList = data || [];
+            } catch(e) {
+                console.error("Presets laden:", e);
+                presetList = [];
+            }
+            // Also load merkmal counts
+            for (const p of presetList) {
+                try {
+                    const { count, error } = await sb.from("we_preset_merkmale")
+                        .select("*", { count: "exact", head: true })
+                        .eq("preset_id", p.id);
+                    p._merkmalCount = error ? 0 : count;
+                } catch(e) { p._merkmalCount = 0; }
+            }
+            renderPresetList();
+        }
+
+        async function loadPresetMerkmale(presetId) {
+            if (!sb || !presetId) { presetMerkmale = []; return; }
+            try {
+                const { data, error } = await sb.from("we_preset_merkmale")
+                    .select("*")
+                    .eq("preset_id", presetId)
+                    .order("sort_order");
+                if (error) throw error;
+                presetMerkmale = (data || []).map(d => ({
+                    id: d.id,
+                    nr: d.nummer,
+                    form: d.form || "circle",
+                    titel: d.titel || "",
+                    anweisung: d.anweisung || "",
+                    fotos: d.fotos || [],
+                    pruef_prozent: d.pruef_prozent ?? 100,
+                    mindest_prueflos: d.mindest_prueflos ?? 1
+                }));
+            } catch(e) {
+                console.error("Preset-Merkmale laden:", e);
+                presetMerkmale = [];
+            }
+        }
+
+        function renderPresetList() {
+            const container = document.getElementById("presetListItems");
+            const empty = document.getElementById("presetListEmpty");
+            if (!container) return;
+
+            if (presetList.length === 0) {
+                container.innerHTML = "";
+                empty.style.display = "";
+                return;
+            }
+            empty.style.display = "none";
+
+            let html = "";
+            for (const p of presetList) {
+                const isActive = p.id === selectedPresetId;
+                const count = p._merkmalCount || 0;
+                html += `<div class="preset-item${isActive ? " active" : ""}" onclick="presetSelect(${p.id})">
+                    <div>
+                        <div class="preset-item-name">${p.name}</div>
+                        ${p.beschreibung ? `<div class="preset-item-desc">${p.beschreibung}</div>` : ""}
+                    </div>
+                    <div class="preset-item-count">${count}</div>
+                </div>`;
+            }
+            container.innerHTML = html;
+        }
+
+        async function presetSelect(id) {
+            selectedPresetId = id;
+            editingMerkmalIdx = null;
+            await loadPresetMerkmale(id);
+            renderPresetList();
+            renderPresetDetail();
+        }
+
+        function renderPresetDetail() {
+            const panel = document.getElementById("presetDetailPanel");
+            if (!selectedPresetId) {
+                panel.style.display = "none";
+                return;
+            }
+            panel.style.display = "";
+            const preset = presetList.find(p => p.id === selectedPresetId);
+            if (!preset) { panel.style.display = "none"; return; }
+
+            document.getElementById("presetDetailTitle").textContent = `Preset: ${preset.name}`;
+            document.getElementById("presetName").value = preset.name;
+            document.getElementById("presetBeschreibung").value = preset.beschreibung || "";
+            document.getElementById("presetMerkmalCount").textContent = `(${presetMerkmale.length})`;
+
+            renderPresetMerkmalList();
+            // Hide edit form when switching
+            document.getElementById("presetMerkmalEdit").style.display = "none";
+        }
+
+        function renderPresetMerkmalList() {
+            const container = document.getElementById("presetMerkmalList");
+            const empty = document.getElementById("presetMerkmalEmpty");
+
+            if (presetMerkmale.length === 0) {
+                container.innerHTML = "";
+                empty.style.display = "";
+                return;
+            }
+            empty.style.display = "none";
+
+            let html = "";
+            for (let i = 0; i < presetMerkmale.length; i++) {
+                const m = presetMerkmale[i];
+                const formLabel = m.form === "rect" ? "Rechteck" : "Kreis";
+                const fotoCount = (m.fotos || []).length;
+                html += `<div class="preset-merkmal-card">
+                    <div class="preset-merkmal-nr">${m.nr}</div>
+                    <div class="preset-merkmal-info">
+                        <div class="preset-merkmal-title">${m.titel || "Prüfmerkmal " + m.nr}</div>
+                        <div class="preset-merkmal-meta">${formLabel} | ${m.pruef_prozent}% | mind. ${m.mindest_prueflos} Stk.${fotoCount > 0 ? " | " + fotoCount + " Foto(s)" : ""}</div>
+                        ${m.anweisung ? `<div class="preset-merkmal-meta" style="margin-top:2px">${m.anweisung.substring(0, 80)}${m.anweisung.length > 80 ? "..." : ""}</div>` : ""}
+                    </div>
+                    <div class="preset-merkmal-actions">
+                        <button onclick="presetEditMerkmal(${i})">Bearb.</button>
+                        <button class="danger" onclick="presetDeleteMerkmal(${i})">&#10005;</button>
+                    </div>
+                </div>`;
+            }
+            container.innerHTML = html;
+        }
+
+        async function presetCreate() {
+            const name = prompt("Name für das neue Preset:");
+            if (!name || !name.trim()) return;
+            if (!sb) return;
+
+            try {
+                const { data, error } = await sb.from("we_presets")
+                    .insert({ name: name.trim(), beschreibung: "" })
+                    .select();
+                if (error) throw error;
+                await loadPresets();
+                if (data && data[0]) {
+                    await presetSelect(data[0].id);
+                }
+            } catch(e) {
+                alert("Fehler beim Erstellen: " + e.message);
+            }
+        }
+
+        async function presetSave() {
+            if (!sb || !selectedPresetId) return;
+            const name = document.getElementById("presetName").value.trim();
+            if (!name) { alert("Bitte einen Namen eingeben."); return; }
+            const beschreibung = document.getElementById("presetBeschreibung").value.trim();
+
+            try {
+                // Update preset header
+                const { error: hErr } = await sb.from("we_presets")
+                    .update({ name, beschreibung })
+                    .eq("id", selectedPresetId);
+                if (hErr) throw hErr;
+
+                // Delete+Insert merkmale
+                await sb.from("we_preset_merkmale").delete().eq("preset_id", selectedPresetId);
+                if (presetMerkmale.length > 0) {
+                    const rows = presetMerkmale.map((m, i) => ({
+                        preset_id: selectedPresetId,
+                        nummer: m.nr,
+                        form: m.form,
+                        titel: m.titel,
+                        anweisung: m.anweisung,
+                        fotos: m.fotos || [],
+                        pruef_prozent: m.pruef_prozent ?? 100,
+                        mindest_prueflos: m.mindest_prueflos ?? 1,
+                        sort_order: i
+                    }));
+                    const { error } = await sb.from("we_preset_merkmale").insert(rows);
+                    if (error) throw error;
+                }
+
+                await loadPresets();
+                await loadPresetMerkmale(selectedPresetId);
+                renderPresetList();
+                renderPresetDetail();
+                alert(`Preset "${name}" gespeichert.`);
+            } catch(e) {
+                alert("Fehler beim Speichern: " + e.message);
+            }
+        }
+
+        async function presetDelete() {
+            if (!sb || !selectedPresetId) return;
+            const preset = presetList.find(p => p.id === selectedPresetId);
+            if (!confirm(`Preset "${preset?.name}" wirklich löschen?`)) return;
+
+            try {
+                const { error } = await sb.from("we_presets").delete().eq("id", selectedPresetId);
+                if (error) throw error;
+                selectedPresetId = null;
+                presetMerkmale = [];
+                editingMerkmalIdx = null;
+                await loadPresets();
+                renderPresetDetail();
+            } catch(e) {
+                alert("Fehler beim Löschen: " + e.message);
+            }
+        }
+
+        function presetAddMerkmal() {
+            editingMerkmalIdx = -1; // -1 = new
+            presetMerkmalFotos = [];
+            const nextNr = presetMerkmale.length > 0
+                ? Math.max(...presetMerkmale.map(m => parseInt(m.nr) || 0)) + 1
+                : 1;
+            const form = document.getElementById("presetMerkmalEdit");
+            form.style.display = "";
+            document.getElementById("presetMerkmalEditTitle").textContent = "Neues Merkmal";
+            document.getElementById("pmNr").value = String(nextNr);
+            document.getElementById("pmForm").value = "circle";
+            document.getElementById("pmTitel").value = "";
+            document.getElementById("pmAnweisung").value = "";
+            document.getElementById("pmProzent").value = "100";
+            document.getElementById("pmMindest").value = "1";
+            document.getElementById("pmFotos").innerHTML = "";
+        }
+
+        function presetEditMerkmal(idx) {
+            editingMerkmalIdx = idx;
+            const m = presetMerkmale[idx];
+            presetMerkmalFotos = [...(m.fotos || [])];
+            const form = document.getElementById("presetMerkmalEdit");
+            form.style.display = "";
+            document.getElementById("presetMerkmalEditTitle").textContent = `Merkmal ${m.nr} bearbeiten`;
+            document.getElementById("pmNr").value = m.nr;
+            document.getElementById("pmForm").value = m.form;
+            document.getElementById("pmTitel").value = m.titel;
+            document.getElementById("pmAnweisung").value = m.anweisung;
+            document.getElementById("pmProzent").value = m.pruef_prozent ?? 100;
+            document.getElementById("pmMindest").value = m.mindest_prueflos ?? 1;
+            renderPmFotos();
+        }
+
+        function renderPmFotos() {
+            const container = document.getElementById("pmFotos");
+            let html = "";
+            for (let i = 0; i < presetMerkmalFotos.length; i++) {
+                html += `<div class="we-foto-thumb">
+                    <img src="${presetMerkmalFotos[i]}" onclick="document.getElementById('weLightboxImg').src='${presetMerkmalFotos[i]}';document.getElementById('weLightbox').classList.add('active')" alt="Foto ${i+1}">
+                    <button class="we-foto-remove" onclick="presetMerkmalFotos.splice(${i},1);renderPmFotos()">&#10005;</button>
+                </div>`;
+            }
+            container.innerHTML = html;
+        }
+
+        // Photo upload handler for preset merkmale
+        document.getElementById("pmFotoInput").addEventListener("change", async function() {
+            const files = Array.from(this.files);
+            this.value = "";
+            for (const file of files) {
+                const dataUrl = await weResizeImage(file, 1200, 0.7);
+                if (!dataUrl) continue;
+                presetMerkmalFotos.push(dataUrl);
+                renderPmFotos();
+            }
+        });
+
+        function presetSaveMerkmal() {
+            const nr = document.getElementById("pmNr").value.trim() || "1";
+            const merkmal = {
+                nr,
+                form: document.getElementById("pmForm").value,
+                titel: document.getElementById("pmTitel").value.trim(),
+                anweisung: document.getElementById("pmAnweisung").value.trim(),
+                pruef_prozent: Math.max(0, Math.min(100, parseFloat(document.getElementById("pmProzent").value) || 100)),
+                mindest_prueflos: Math.max(1, parseInt(document.getElementById("pmMindest").value) || 1),
+                fotos: [...presetMerkmalFotos]
+            };
+
+            if (editingMerkmalIdx === -1) {
+                presetMerkmale.push(merkmal);
+            } else if (editingMerkmalIdx !== null) {
+                presetMerkmale[editingMerkmalIdx] = merkmal;
+            }
+
+            editingMerkmalIdx = null;
+            presetMerkmalFotos = [];
+            document.getElementById("presetMerkmalEdit").style.display = "none";
+            document.getElementById("presetMerkmalCount").textContent = `(${presetMerkmale.length})`;
+            renderPresetMerkmalList();
+        }
+
+        function presetCancelMerkmal() {
+            editingMerkmalIdx = null;
+            presetMerkmalFotos = [];
+            document.getElementById("presetMerkmalEdit").style.display = "none";
+        }
+
+        function presetDeleteMerkmal(idx) {
+            const m = presetMerkmale[idx];
+            if (!confirm(`Merkmal "${m.titel || m.nr}" löschen?`)) return;
+            presetMerkmale.splice(idx, 1);
+            if (editingMerkmalIdx === idx) {
+                editingMerkmalIdx = null;
+                document.getElementById("presetMerkmalEdit").style.display = "none";
+            }
+            document.getElementById("presetMerkmalCount").textContent = `(${presetMerkmale.length})`;
+            renderPresetMerkmalList();
+        }
+
+        // =============================================
+        // Preset anwenden (im WE-Prüfpunkte Tab)
+        // =============================================
+        function togglePresetDropdown() {
+            const dd = document.getElementById("presetDropdown");
+            if (dd.classList.contains("open")) {
+                dd.classList.remove("open");
+                return;
+            }
+            // Populate dropdown
+            if (presetList.length === 0) {
+                dd.innerHTML = `<div class="preset-dropdown-empty">Keine Presets vorhanden.<br>Erstelle Presets im Tab "Prüf-Presets".</div>`;
+            } else {
+                let html = "";
+                for (const p of presetList) {
+                    const count = p._merkmalCount || 0;
+                    html += `<div class="preset-dropdown-item" onclick="weApplyPreset(${p.id})">
+                        <div class="preset-dropdown-item-name">${p.name} (${count} Merkmale)</div>
+                        ${p.beschreibung ? `<div class="preset-dropdown-item-desc">${p.beschreibung}</div>` : ""}
+                    </div>`;
+                }
+                dd.innerHTML = html;
+            }
+            dd.classList.add("open");
+        }
+
+        async function weApplyPreset(presetId) {
+            document.getElementById("presetDropdown").classList.remove("open");
+
+            if (!sb) return;
+            try {
+                const { data, error } = await sb.from("we_preset_merkmale")
+                    .select("*")
+                    .eq("preset_id", presetId)
+                    .order("sort_order");
+                if (error) throw error;
+                if (!data || data.length === 0) {
+                    alert("Dieses Preset hat keine Merkmale.");
+                    return;
+                }
+
+                const preset = presetList.find(p => p.id === presetId);
+                const count = data.length;
+
+                for (let i = 0; i < data.length; i++) {
+                    const d = data[i];
+                    // Stagger positions around center so they don't overlap
+                    const col = i % 4;
+                    const row = Math.floor(i / 4);
+                    const x = 0.25 + col * 0.15;
+                    const y = 0.25 + row * 0.12;
+
+                    wePruefpunkte.push({
+                        id: null,
+                        nr: String(weNextNr),
+                        form: d.form || "circle",
+                        x: Math.min(x, 0.9),
+                        y: Math.min(y, 0.9),
+                        titel: d.titel || "",
+                        anweisung: d.anweisung || "",
+                        fotos: d.fotos || [],
+                        pruef_prozent: d.pruef_prozent ?? 100,
+                        mindest_prueflos: d.mindest_prueflos ?? 1
+                    });
+                    weNextNr++;
+                }
+
+                weRenderAll();
+                alert(`${count} Prüfmerkmal(e) aus "${preset?.name || "Preset"}" hinzugefügt. Bitte Punkte auf der Zeichnung positionieren und speichern.`);
+            } catch(e) {
+                alert("Fehler beim Laden: " + e.message);
+            }
+        }
     </script>
 
     <!-- Drawing Review Overlay -->

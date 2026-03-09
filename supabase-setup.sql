@@ -117,3 +117,37 @@ CREATE POLICY "Allow public read" ON we_pruefpunkte FOR SELECT USING (true);
 CREATE POLICY "Allow public insert" ON we_pruefpunkte FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow public update" ON we_pruefpunkte FOR UPDATE USING (true);
 CREATE POLICY "Allow public delete" ON we_pruefpunkte FOR DELETE USING (true);
+
+-- 9. WE Prüf-Presets (wiederverwendbare Vorlagen für Prüfmerkmale)
+CREATE TABLE IF NOT EXISTS we_presets (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    beschreibung TEXT DEFAULT '',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE we_presets ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public read" ON we_presets FOR SELECT USING (true);
+CREATE POLICY "Allow public insert" ON we_presets FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update" ON we_presets FOR UPDATE USING (true);
+CREATE POLICY "Allow public delete" ON we_presets FOR DELETE USING (true);
+
+-- 10. WE Preset-Merkmale (Prüfmerkmale innerhalb eines Presets, ohne x/y)
+CREATE TABLE IF NOT EXISTS we_preset_merkmale (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    preset_id BIGINT REFERENCES we_presets(id) ON DELETE CASCADE,
+    nummer TEXT NOT NULL,
+    form TEXT NOT NULL DEFAULT 'circle',
+    titel TEXT NOT NULL DEFAULT '',
+    anweisung TEXT NOT NULL DEFAULT '',
+    fotos JSONB DEFAULT '[]',
+    pruef_prozent DOUBLE PRECISION NOT NULL DEFAULT 100,
+    mindest_prueflos INTEGER NOT NULL DEFAULT 1,
+    sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+ALTER TABLE we_preset_merkmale ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public read" ON we_preset_merkmale FOR SELECT USING (true);
+CREATE POLICY "Allow public insert" ON we_preset_merkmale FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update" ON we_preset_merkmale FOR UPDATE USING (true);
+CREATE POLICY "Allow public delete" ON we_preset_merkmale FOR DELETE USING (true);
