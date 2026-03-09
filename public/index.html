@@ -868,9 +868,9 @@
         /* Mode Selector Tiles */
         .mode-selector {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr 1fr 1fr;
             gap: 24px;
-            max-width: 900px;
+            max-width: 1100px;
             margin: 60px auto;
         }
         .mode-tile {
@@ -1274,6 +1274,59 @@
             border-color: var(--primary);
         }
 
+        /* Stammdaten Tile */
+        .mode-tile.stammdaten-tile { border-color: #e0c060; }
+        .mode-tile.stammdaten-tile:hover { border-color: #c5a030; box-shadow: 0 8px 32px rgba(197,160,48,0.2); }
+
+        /* PIN Dialog */
+        .pin-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 9999;
+        }
+        .pin-dialog {
+            background: white; border-radius: 16px; padding: 32px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.2); text-align: center;
+            min-width: 320px;
+        }
+        .pin-dialog h3 { margin: 0 0 8px; font-size: 1.2rem; }
+        .pin-dialog p { color: #666; font-size: 0.9rem; margin: 0 0 20px; }
+        .pin-dialog input {
+            width: 180px; padding: 12px; font-size: 1.5rem; text-align: center;
+            border: 2px solid var(--border); border-radius: 10px;
+            letter-spacing: 8px; font-family: monospace;
+        }
+        .pin-dialog input:focus { outline: none; border-color: var(--primary); }
+        .pin-dialog .pin-error { color: var(--danger); font-size: 0.85rem; margin-top: 8px; min-height: 1.2em; }
+        .pin-dialog .pin-btns { display: flex; gap: 10px; justify-content: center; margin-top: 16px; }
+        .pin-dialog .pin-btns button {
+            padding: 8px 24px; border-radius: 8px; border: 2px solid var(--border);
+            background: white; font-size: 0.95rem; cursor: pointer; font-weight: 600;
+        }
+        .pin-dialog .pin-btns button.primary { background: var(--primary); color: white; border-color: var(--primary); }
+
+        /* Stammdaten Mode */
+        .sd-tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+        .sd-tab {
+            padding: 10px 20px; border: 2px solid var(--border);
+            border-radius: 8px 8px 0 0; background: #f5f5f5;
+            cursor: pointer; font-weight: 600; font-size: 0.9rem;
+            border-bottom: none;
+        }
+        .sd-tab:hover { background: #e8f0fe; }
+        .sd-tab.active { background: var(--card); border-color: var(--primary); color: var(--primary); }
+        .sd-tab-content { display: none; }
+        .sd-tab-content.active { display: block; }
+
+        /* Auftrag-Auswahl Panel (Fertigung Werker) */
+        .auftrag-select-panel {
+            background: var(--card); border-radius: 12px;
+            padding: 24px; margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .auftrag-select-panel h2 { margin-bottom: 16px; font-size: 1.2rem; }
+        .auftrag-select-panel .artikel-select-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
         @media (max-width: 1024px) {
             .mode-selector { grid-template-columns: 1fr; max-width: 450px; }
             .we-work-area { flex-direction: column; }
@@ -1301,55 +1354,48 @@
                 <div class="tile-title">Qualitätssicherung Wareneingang</div>
                 <div class="tile-desc">Visuelle Prüfanweisungen mit Zeichnungsmarkierungen und Referenzfotos</div>
             </div>
+            <div class="mode-tile stammdaten-tile" onclick="openStammdaten()">
+                <div class="tile-icon">&#128274;</div>
+                <div class="tile-title">Stammdaten</div>
+                <div class="tile-desc">Artikel, Messpläne, Zeichnungen und Prüfanweisungen verwalten</div>
+            </div>
+        </div>
+
+        <!-- PIN Dialog (initially hidden) -->
+        <div class="pin-overlay" id="pinOverlay" style="display:none">
+            <div class="pin-dialog">
+                <h3>Stammdaten-Zugang</h3>
+                <p>Bitte PIN eingeben</p>
+                <input type="password" id="pinInput" maxlength="6" inputmode="numeric" autocomplete="off">
+                <div class="pin-error" id="pinError"></div>
+                <div class="pin-btns">
+                    <button class="primary" onclick="submitPin()">OK</button>
+                    <button onclick="closePin()">Abbrechen</button>
+                </div>
+            </div>
         </div>
 
         <!-- === FERTIGUNG MODE === -->
         <div id="fertigungMode" style="display:none">
         <button class="mode-back-btn" onclick="selectMode(null)">&#8592; Zurück zur Auswahl</button>
 
-        <!-- Article Database Panel -->
-        <div class="artikel-panel" id="artikelPanel">
-            <h2>Artikeldatenbank</h2>
+        <!-- Auftrag-Auswahl für Werker -->
+        <div class="auftrag-select-panel" id="auftragSelectPanel">
+            <h2>Fertigungsauftrag wählen</h2>
             <div class="artikel-select-row">
-                <select id="artikelSelect">
-                    <option value="">– Artikel wählen –</option>
+                <select id="fertAuftragSelect" style="min-width:300px">
+                    <option value="">– Auftrag wählen –</option>
                 </select>
-                <input type="text" id="auftragNrInput" placeholder="Fertigungsauftragsnr. eingeben" style="width:200px;padding:6px 10px;border:1.5px solid #ccc;border-radius:6px;font-size:.95rem">
-                <button class="primary" onclick="createFertigungsauftrag()">Fertigungsauftrag erstellen</button>
-                <button onclick="toggleArtikelForm('new')">+ Neu</button>
-                <button onclick="toggleArtikelForm('edit')">Bearbeiten</button>
-                <button class="danger" onclick="deleteSelectedArtikel()">Löschen</button>
-                <button id="lockBtn" onclick="toggleArtikelLock()">Sperren</button>
-                <button onclick="showAuftragHistorie()">Historie</button>
-                <button id="reviewDrawingBtn" onclick="openDrawingReview()" style="display:none;margin-left:auto;border-color:var(--primary);color:var(--primary);font-weight:600">Zeichnung sichten</button>
-            </div>
-            <div class="artikel-form" id="artikelForm">
-                <div class="form-grid">
-                    <div><label>Artikelnummer *</label><input id="afArtikelNr"></div>
-                    <div><label>Bezeichnung</label><input id="afBezeichnung"></div>
-                    <div><label>Ident-Nr.</label><input id="afIdentNr"></div>
-                    <div><label>Zeichnungs-Nr.</label><input id="afZeichnungsNr"></div>
-                    <div><label>Version</label><input id="afVersion"></div>
-                    <div><label>Taktzeit (s)</label><input id="afTaktzeit" type="number" min="1" max="9999" value="30"></div>
-                </div>
-                <div class="file-row">
-                    <label>Messplan:</label>
-                    <span class="file-status" id="afMessplanStatus">Keine Datei</span>
-                    <button onclick="document.getElementById('afMessplanInput').click()">PDF wählen</button>
-                    <input type="file" id="afMessplanInput" accept=".pdf" style="display:none">
-                </div>
-                <div class="file-row">
-                    <label>Zeichnung:</label>
-                    <span class="file-status" id="afZeichnungStatus">Keine Datei</span>
-                    <button onclick="document.getElementById('afZeichnungInput').click()">PDF wählen</button>
-                    <input type="file" id="afZeichnungInput" accept=".pdf,image/*" style="display:none">
-                </div>
-                <div class="btn-row">
-                    <button class="btn-primary" id="afSaveBtn" onclick="saveArtikel()">Speichern</button>
-                    <button onclick="toggleArtikelForm()">Abbrechen</button>
-                </div>
+                <button class="primary" onclick="loadSelectedAuftrag()">Auftrag laden</button>
+                <button onclick="showAuftragHistorie()">Auftragshistorie</button>
             </div>
         </div>
+
+        <!-- Hidden: Artikel-Select + Form für Stammdaten (verschoben, aber IDs beibehalten für JS-Kompatibilität) -->
+        <select id="artikelSelect" style="display:none"><option value="">–</option></select>
+        <div id="artikelForm" style="display:none"></div>
+        <input type="file" id="afMessplanInput" accept=".pdf" style="display:none">
+        <input type="file" id="afZeichnungInput" accept=".pdf,image/*" style="display:none">
 
         <!-- Hidden elements kept for JS compatibility -->
         <div id="uploadArea" class="upload-area" style="display:none"></div>
@@ -1461,34 +1507,31 @@
         </div>
         </div><!-- /fertigungMode -->
 
-        <!-- === WARENEINGANG MODE === -->
+        <!-- === WARENEINGANG MODE (Werker: nur Checkliste) === -->
         <div id="wareneingangMode" style="display:none">
         <button class="mode-back-btn" onclick="selectMode(null)">&#8592; Zurück zur Auswahl</button>
 
-        <!-- WE Artikel Selection -->
         <div class="we-artikel-panel">
-            <h2>Wareneingang – Artikel wählen</h2>
+            <h2>Wareneingang – Prüfung</h2>
             <div class="artikel-select-row">
                 <select id="weArtikelSelect">
                     <option value="">– Artikel wählen –</option>
                 </select>
                 <button class="primary" onclick="weLoadArtikel()">Artikel laden</button>
-                <button id="weSaveBtn" onclick="weSavePruefpunkte()">Prüfpunkte speichern</button>
-                <button id="weModeSwitchBtn" onclick="weToggleMode()" style="display:none">Prüfmodus</button>
             </div>
         </div>
 
-        <!-- WE Work Area: Drawing + Sidebar -->
+        <!-- WE Work Area: Zeichnung + Checkliste -->
         <div class="we-work-area" id="weWorkArea" style="display:none">
-            <!-- Drawing Section -->
             <div class="we-drawing-section">
                 <div class="we-drawing-toolbar">
                     <h3>Prüfzeichnung</h3>
                     <div class="spacer"></div>
                     <span id="weDrawingStatus" style="font-size:0.85rem;color:#666"></span>
-                    <button class="we-tool-btn" id="weAddCircleBtn" onclick="weStartPlacement('circle')">+ Kreis</button>
-                    <button class="we-tool-btn" id="weAddRectBtn" onclick="weStartPlacement('rect')">+ Rechteck</button>
-                    <button class="we-tool-btn" id="weCancelPlaceBtn" onclick="weCancelPlacement()" style="display:none;border-color:var(--danger);color:var(--danger)">Abbrechen</button>
+                    <!-- Edit buttons hidden for workers -->
+                    <button class="we-tool-btn" id="weAddCircleBtn" onclick="weStartPlacement('circle')" style="display:none">+ Kreis</button>
+                    <button class="we-tool-btn" id="weAddRectBtn" onclick="weStartPlacement('rect')" style="display:none">+ Rechteck</button>
+                    <button class="we-tool-btn" id="weCancelPlaceBtn" onclick="weCancelPlacement()" style="display:none">Abbrechen</button>
                 </div>
                 <div class="we-drawing-viewer" id="weDrawingViewer">
                     <div class="we-drawing-inner" id="weDrawingInner">
@@ -1497,8 +1540,8 @@
                 </div>
             </div>
 
-            <!-- Sidebar: Pruefpunkte List + Detail -->
-            <div class="we-sidebar">
+            <!-- Editor-Sidebar (hidden for workers, used only in Stammdaten) -->
+            <div class="we-sidebar" id="weEditSidebar" style="display:none">
                 <div class="we-punkt-list">
                     <h3>Prüfpunkte <span id="wePunktCount" style="font-weight:400;color:#666"></span></h3>
                     <div id="wePunktListItems"></div>
@@ -1506,36 +1549,20 @@
                         Klicke "+ Kreis" oder "+ Rechteck" und dann auf die Zeichnung, um einen Prüfpunkt zu erstellen.
                     </div>
                 </div>
-
                 <div class="we-detail-panel" id="weDetailPanel" style="display:none">
                     <h3 id="weDetailTitle">Prüfpunkt bearbeiten</h3>
                     <div class="we-detail-form">
                         <div class="form-row">
-                            <div>
-                                <label>Nummer</label>
-                                <input type="text" id="weDetailNr" placeholder="z.B. 1, 2, A...">
-                            </div>
-                            <div>
-                                <label>Form</label>
-                                <select id="weDetailForm">
-                                    <option value="circle">Kreis</option>
-                                    <option value="rect">Rechteck</option>
-                                </select>
-                            </div>
+                            <div><label>Nummer</label><input type="text" id="weDetailNr" placeholder="z.B. 1, 2, A..."></div>
+                            <div><label>Form</label><select id="weDetailForm"><option value="circle">Kreis</option><option value="rect">Rechteck</option></select></div>
                         </div>
                         <label>Bezeichnung</label>
                         <input type="text" id="weDetailTitle2" placeholder="z.B. Oberflächenprüfung">
                         <label>Prüfanweisung</label>
-                        <textarea id="weDetailAnweisung" placeholder="Was soll der Werker prüfen? z.B. Nach dem Verzinken Oberfläche auf Beschädigungen prüfen..."></textarea>
+                        <textarea id="weDetailAnweisung" placeholder="Was soll der Werker prüfen?"></textarea>
                         <div class="form-row">
-                            <div>
-                                <label>Prüfanteil (%)</label>
-                                <input type="number" id="weDetailProzent" min="0" max="100" value="100">
-                            </div>
-                            <div>
-                                <label>Mindestprüflos</label>
-                                <input type="number" id="weDetailMindest" min="1" value="1">
-                            </div>
+                            <div><label>Prüfanteil (%)</label><input type="number" id="weDetailProzent" min="0" max="100" value="100"></div>
+                            <div><label>Mindestprüflos</label><input type="number" id="weDetailMindest" min="1" value="1"></div>
                         </div>
                         <label>Referenzfotos</label>
                         <input type="file" id="weDetailFotoInput" accept="image/*" multiple style="margin-bottom:4px">
@@ -1549,8 +1576,8 @@
                 </div>
             </div>
 
-            <!-- Prüfer-Checkliste (im Prüfmodus sichtbar) -->
-            <div class="we-sidebar" id="wePrueferSidebar" style="display:none">
+            <!-- Prüfer-Checkliste (Werker sieht nur diese) -->
+            <div class="we-sidebar" id="wePrueferSidebar">
                 <div class="we-check-panel" id="wePrueferPanel">
                     <div class="we-check-header">
                         <h3>Prüf-Checkliste</h3>
@@ -1563,6 +1590,73 @@
             </div>
         </div>
         </div><!-- /wareneingangMode -->
+
+        <!-- === STAMMDATEN MODE (PIN-geschützt) === -->
+        <div id="stammdatenMode" style="display:none">
+        <button class="mode-back-btn" onclick="selectMode(null)">&#8592; Zurück zur Auswahl</button>
+
+        <!-- Artikeldatenbank -->
+        <div class="artikel-panel" id="sdArtikelPanel">
+            <h2>Artikeldatenbank</h2>
+            <div class="artikel-select-row">
+                <select id="sdArtikelSelect">
+                    <option value="">– Artikel wählen –</option>
+                </select>
+                <button onclick="sdToggleArtikelForm('new')">+ Neu</button>
+                <button onclick="sdToggleArtikelForm('edit')">Bearbeiten</button>
+                <button class="danger" onclick="deleteSelectedArtikel()">Löschen</button>
+                <button id="sdLockBtn" onclick="toggleArtikelLock()">Sperren</button>
+                <input type="text" id="sdAuftragNrInput" placeholder="Fertigungsauftragsnr." style="width:200px;padding:6px 10px;border:1.5px solid #ccc;border-radius:6px;font-size:.95rem;margin-left:auto">
+                <button class="primary" onclick="sdCreateFertigungsauftrag()">Auftrag erstellen</button>
+            </div>
+            <div class="artikel-form" id="sdArtikelForm">
+                <div class="form-grid">
+                    <div><label>Artikelnummer *</label><input id="sdAfArtikelNr"></div>
+                    <div><label>Bezeichnung</label><input id="sdAfBezeichnung"></div>
+                    <div><label>Ident-Nr.</label><input id="sdAfIdentNr"></div>
+                    <div><label>Zeichnungs-Nr.</label><input id="sdAfZeichnungsNr"></div>
+                    <div><label>Version</label><input id="sdAfVersion"></div>
+                    <div><label>Taktzeit (s)</label><input id="sdAfTaktzeit" type="number" min="1" max="9999" value="30"></div>
+                </div>
+                <div class="file-row">
+                    <label>Messplan:</label>
+                    <span class="file-status" id="sdAfMessplanStatus">Keine Datei</span>
+                    <button onclick="document.getElementById('sdAfMessplanInput').click()">PDF wählen</button>
+                    <input type="file" id="sdAfMessplanInput" accept=".pdf" style="display:none">
+                </div>
+                <div class="file-row">
+                    <label>Zeichnung:</label>
+                    <span class="file-status" id="sdAfZeichnungStatus">Keine Datei</span>
+                    <button onclick="document.getElementById('sdAfZeichnungInput').click()">PDF wählen</button>
+                    <input type="file" id="sdAfZeichnungInput" accept=".pdf,image/*" style="display:none">
+                </div>
+                <div class="btn-row">
+                    <button class="btn-primary" id="sdAfSaveBtn" onclick="sdSaveArtikel()">Speichern</button>
+                    <button onclick="sdToggleArtikelForm()">Abbrechen</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stammdaten Tabs: Zeichnung + WE-Prüfpunkte -->
+        <div id="sdTabArea" style="display:none">
+            <div class="sd-tabs">
+                <div class="sd-tab active" onclick="sdSwitchTab('zeichnung')">Zeichnung sichten</div>
+                <div class="sd-tab" onclick="sdSwitchTab('wepruef')">WE-Prüfpunkte</div>
+            </div>
+            <div class="sd-tab-content active" id="sdTabZeichnung">
+                <button class="primary" onclick="openDrawingReview()" id="sdReviewDrawingBtn">Zeichnung und Messpunkte prüfen</button>
+            </div>
+            <div class="sd-tab-content" id="sdTabWEPruef">
+                <div class="artikel-select-row" style="margin-bottom:12px">
+                    <button class="we-tool-btn" onclick="weStartPlacement('circle')">+ Kreis</button>
+                    <button class="we-tool-btn" onclick="weStartPlacement('rect')">+ Rechteck</button>
+                    <button onclick="weSavePruefpunkte()">Prüfpunkte speichern</button>
+                </div>
+                <p style="color:#666;font-size:0.85rem">Klicke auf die Zeichnung links um Prüfpunkte zu setzen. Punkte in der Liste rechts bearbeiten.</p>
+            </div>
+        </div>
+
+        </div><!-- /stammdatenMode -->
 
     </div>
 
@@ -1621,6 +1715,8 @@
                 }
                 if (prev) sel.value = prev;
                 updateLockBtn();
+                // Also update Stammdaten select if it exists
+                if (document.getElementById("sdArtikelSelect")) sdPopulateArtikelSelect();
             } catch (e) { console.error("Artikelliste laden:", e); }
         }
 
@@ -1719,13 +1815,18 @@
             } catch (e) { alert("Fehler: " + e.message); }
         }
 
+        function getActiveArtikelSelect() {
+            return currentMode === 'stammdaten'
+                ? document.getElementById("sdArtikelSelect")
+                : document.getElementById("artikelSelect");
+        }
+
         async function deleteSelectedArtikel() {
-            const sel = document.getElementById("artikelSelect");
+            const sel = getActiveArtikelSelect();
             if (!sel.value) { alert("Bitte zuerst einen Artikel auswählen."); return; }
             const art = artikelList.find(a => a.id === parseInt(sel.value));
             if (art.gesperrt) { alert("Artikel ist gesperrt. Bitte zuerst freigeben."); return; }
             if (!confirm(`Artikel "${art.artikel_nr} – ${art.bezeichnung}" wirklich löschen?`)) return;
-            // Delete files from storage
             const { data: files } = await sb.storage.from(BUCKET).list(String(art.id));
             if (files && files.length > 0) {
                 await sb.storage.from(BUCKET).remove(files.map(f => `${art.id}/${f.name}`));
@@ -1736,8 +1837,9 @@
         }
 
         function updateLockBtn() {
-            const sel = document.getElementById("artikelSelect");
-            const btn = document.getElementById("lockBtn");
+            const sel = getActiveArtikelSelect();
+            const btn = document.getElementById("sdLockBtn") || document.getElementById("lockBtn");
+            if (!btn) return;
             const art = artikelList.find(a => a.id === parseInt(sel.value));
             if (art && art.gesperrt) {
                 btn.textContent = "Freigeben";
@@ -1750,10 +1852,8 @@
             }
         }
 
-        document.getElementById("artikelSelect").addEventListener("change", updateLockBtn);
-
         async function toggleArtikelLock() {
-            const sel = document.getElementById("artikelSelect");
+            const sel = getActiveArtikelSelect();
             if (!sel.value) { alert("Bitte zuerst einen Artikel auswählen."); return; }
             const art = artikelList.find(a => a.id === parseInt(sel.value));
             const newState = !art.gesperrt;
@@ -1838,8 +1938,8 @@
                 restoreHiddenMarkers();
 
                 // Show review button if drawing is loaded
-                document.getElementById("reviewDrawingBtn").style.display =
-                    art.zeichnung_file ? "" : "none";
+                const revBtn = document.getElementById("reviewDrawingBtn") || document.getElementById("sdReviewDrawingBtn");
+                if (revBtn) revBtn.style.display = art.zeichnung_file ? "" : "none";
             } catch (e) { alert("Fehler: " + e.message); }
         }
 
@@ -1851,6 +1951,18 @@
         });
         document.getElementById("afZeichnungInput").addEventListener("change", function() {
             const st = document.getElementById("afZeichnungStatus");
+            st.textContent = this.files[0] ? this.files[0].name : "Keine Datei";
+            st.className = "file-status" + (this.files[0] ? " ok" : "");
+        });
+
+        // SD file input status updates
+        document.getElementById("sdAfMessplanInput").addEventListener("change", function() {
+            const st = document.getElementById("sdAfMessplanStatus");
+            st.textContent = this.files[0] ? this.files[0].name : "Keine Datei";
+            st.className = "file-status" + (this.files[0] ? " ok" : "");
+        });
+        document.getElementById("sdAfZeichnungInput").addEventListener("change", function() {
+            const st = document.getElementById("sdAfZeichnungStatus");
             st.textContent = this.files[0] ? this.files[0].name : "Keine Datei";
             st.className = "file-status" + (this.files[0] ? " ok" : "");
         });
@@ -3011,6 +3123,10 @@
         }
 
         function getCurrentArtikelId() {
+            if (currentMode === 'stammdaten') {
+                const sel = document.getElementById("sdArtikelSelect");
+                return sel && sel.value ? parseInt(sel.value) : null;
+            }
             const sel = document.getElementById("artikelSelect");
             return sel && sel.value ? parseInt(sel.value) : null;
         }
@@ -3242,23 +3358,252 @@
         // ===================================================================
         // MODE SELECTION
         // ===================================================================
-        let currentMode = null; // null | 'fertigung' | 'wareneingang'
+        let currentMode = null; // null | 'fertigung' | 'wareneingang' | 'stammdaten'
+        const STAMMDATEN_PIN = "1234"; // Default-PIN — bei Bedarf ändern
 
         function selectMode(mode) {
             currentMode = mode;
             document.getElementById("modeSelector").style.display = mode ? "none" : "grid";
             document.getElementById("fertigungMode").style.display = mode === "fertigung" ? "block" : "none";
             document.getElementById("wareneingangMode").style.display = mode === "wareneingang" ? "block" : "none";
+            document.getElementById("stammdatenMode").style.display = mode === "stammdaten" ? "block" : "none";
 
-            // Update header
             if (mode === "fertigung") {
                 document.querySelector(".header h1").textContent = "QS Fertigung";
+                populateFertAuftragSelect();
             } else if (mode === "wareneingang") {
                 document.querySelector(".header h1").textContent = "QS Wareneingang";
+                weMode = 'check'; // Werker sieht nur Checkliste
+                // Ensure WE work area is back in wareneingangMode
+                const weWork = document.getElementById("weWorkArea");
+                document.getElementById("wareneingangMode").appendChild(weWork);
+                document.getElementById("weEditSidebar").style.display = "none";
+                document.getElementById("wePrueferSidebar").style.display = "";
                 wePopulateArtikelSelect();
+            } else if (mode === "stammdaten") {
+                document.querySelector(".header h1").textContent = "Stammdaten";
+                document.getElementById("headerInfo").textContent = "Artikelverwaltung";
+                sdPopulateArtikelSelect();
             } else {
                 document.querySelector(".header h1").textContent = "Qualitätssicherung";
                 document.getElementById("headerInfo").textContent = "Bereich wählen";
+            }
+        }
+
+        // --- PIN Dialog ---
+        function openStammdaten() {
+            document.getElementById("pinOverlay").style.display = "flex";
+            const inp = document.getElementById("pinInput");
+            inp.value = "";
+            document.getElementById("pinError").textContent = "";
+            setTimeout(() => inp.focus(), 100);
+        }
+        function closePin() {
+            document.getElementById("pinOverlay").style.display = "none";
+        }
+        function submitPin() {
+            const pin = document.getElementById("pinInput").value;
+            if (pin === STAMMDATEN_PIN) {
+                closePin();
+                selectMode("stammdaten");
+            } else {
+                document.getElementById("pinError").textContent = "Falscher PIN";
+                document.getElementById("pinInput").value = "";
+                document.getElementById("pinInput").focus();
+            }
+        }
+        document.getElementById("pinInput").addEventListener("keydown", (e) => {
+            if (e.key === "Enter") submitPin();
+            if (e.key === "Escape") closePin();
+        });
+
+        // --- Auftrag-Auswahl (Fertigung Werker) ---
+        async function populateFertAuftragSelect() {
+            const sel = document.getElementById("fertAuftragSelect");
+            sel.innerHTML = '<option value="">– Auftrag wählen –</option>';
+            if (!sb) return;
+            try {
+                const { data } = await sb.from("fertigungsauftrag")
+                    .select("*, artikel:artikel_id(artikel_nr, bezeichnung)")
+                    .eq("status", "aktiv")
+                    .order("created_at", { ascending: false });
+                for (const a of (data || [])) {
+                    const artLabel = a.artikel ? `${a.artikel.artikel_nr} – ${a.artikel.bezeichnung}` : "";
+                    sel.innerHTML += `<option value="${a.id}">${a.auftragsnummer} (${artLabel})</option>`;
+                }
+            } catch(e) { console.error("Aufträge laden:", e); }
+        }
+        async function loadSelectedAuftrag() {
+            const sel = document.getElementById("fertAuftragSelect");
+            if (!sel.value) { alert("Bitte einen Auftrag wählen."); return; }
+            await loadAuftrag(parseInt(sel.value));
+        }
+
+        // --- Stammdaten: Artikelverwaltung ---
+        function sdPopulateArtikelSelect() {
+            const sel = document.getElementById("sdArtikelSelect");
+            sel.innerHTML = '<option value="">– Artikel wählen –</option>';
+            for (const a of artikelList) {
+                const lock = a.gesperrt ? "\u{1F512} " : "";
+                const label = `${lock}${a.artikel_nr} – ${a.bezeichnung}` + (a.version ? ` (V${a.version})` : "");
+                sel.innerHTML += `<option value="${a.id}">${label}</option>`;
+            }
+        }
+        document.getElementById("sdArtikelSelect").addEventListener("change", async function() {
+            const artId = parseInt(this.value);
+            const art = artikelList.find(a => a.id === artId);
+            document.getElementById("sdTabArea").style.display = art ? "" : "none";
+            document.getElementById("sdLockBtn").textContent = art && art.gesperrt ? "Freigeben" : "Sperren";
+            if (art) {
+                // Sync the hidden artikelSelect for compatibility
+                document.getElementById("artikelSelect").value = art.id;
+                // Also update WE for this article
+                weCurrentArtikelId = art.id;
+                document.getElementById("headerInfo").textContent = `${art.artikel_nr} – ${art.bezeichnung}`;
+
+                // Load drawing for WE-Prüfpunkte tab
+                if (art.zeichnung_file) {
+                    try {
+                        const { data: blob, error } = await sb.storage.from(BUCKET).download(art.zeichnung_file);
+                        if (!error) {
+                            const fd = new FormData();
+                            fd.append("file", blob, art.zeichnung_file.split("/").pop());
+                            const res = await fetch("/api/upload-drawing", { method: "POST", body: fd });
+                            const zd = await res.json();
+                            if (zd.image) {
+                                document.getElementById("weDrawingImg").src = zd.image;
+                                document.getElementById("weWorkArea").style.display = "flex";
+                            }
+                        }
+                    } catch(e) { console.error("Zeichnung laden:", e); }
+                }
+                await weLoadPruefpunkte();
+                // Show edit sidebar in stammdaten mode
+                weMode = 'edit';
+                document.getElementById("weEditSidebar").style.display = "";
+                document.getElementById("wePrueferSidebar").style.display = "none";
+                weRenderAll();
+            }
+        });
+
+        let sdFormMode = null; // null | 'new' | 'edit'
+        function sdToggleArtikelForm(mode) {
+            const form = document.getElementById("sdArtikelForm");
+            if (!mode || sdFormMode === mode) {
+                form.classList.remove("visible");
+                sdFormMode = null;
+                return;
+            }
+            sdFormMode = mode;
+            form.classList.add("visible");
+            if (mode === "new") {
+                document.getElementById("sdAfArtikelNr").value = "";
+                document.getElementById("sdAfBezeichnung").value = "";
+                document.getElementById("sdAfIdentNr").value = "";
+                document.getElementById("sdAfZeichnungsNr").value = "";
+                document.getElementById("sdAfVersion").value = "";
+                document.getElementById("sdAfTaktzeit").value = "30";
+                document.getElementById("sdAfMessplanStatus").textContent = "Keine Datei";
+                document.getElementById("sdAfZeichnungStatus").textContent = "Keine Datei";
+            } else if (mode === "edit") {
+                const sel = document.getElementById("sdArtikelSelect");
+                const art = artikelList.find(a => a.id === parseInt(sel.value));
+                if (!art) { alert("Bitte zuerst einen Artikel wählen."); sdToggleArtikelForm(); return; }
+                if (art.gesperrt) { alert("Artikel ist gesperrt."); sdToggleArtikelForm(); return; }
+                document.getElementById("sdAfArtikelNr").value = art.artikel_nr;
+                document.getElementById("sdAfBezeichnung").value = art.bezeichnung;
+                document.getElementById("sdAfIdentNr").value = art.ident_nr;
+                document.getElementById("sdAfZeichnungsNr").value = art.zeichnungs_nr;
+                document.getElementById("sdAfVersion").value = art.version;
+                document.getElementById("sdAfTaktzeit").value = art.taktzeit;
+                document.getElementById("sdAfMessplanStatus").textContent = art.messplan_file ? "OK" : "Keine Datei";
+                document.getElementById("sdAfZeichnungStatus").textContent = art.zeichnung_file ? "OK" : "Keine Datei";
+            }
+        }
+
+        async function sdSaveArtikel() {
+            const nr = document.getElementById("sdAfArtikelNr").value.trim();
+            if (!nr) { alert("Artikelnummer ist Pflicht."); return; }
+            const row = {
+                artikel_nr: nr,
+                bezeichnung: document.getElementById("sdAfBezeichnung").value.trim(),
+                ident_nr: document.getElementById("sdAfIdentNr").value.trim(),
+                zeichnungs_nr: document.getElementById("sdAfZeichnungsNr").value.trim(),
+                version: document.getElementById("sdAfVersion").value.trim(),
+                taktzeit: parseInt(document.getElementById("sdAfTaktzeit").value) || 30
+            };
+
+            const mpFile = document.getElementById("sdAfMessplanInput").files[0];
+            const zFile = document.getElementById("sdAfZeichnungInput").files[0];
+
+            try {
+                let artId;
+                if (sdFormMode === "new") {
+                    const { data, error } = await sb.from("artikel").insert(row).select().single();
+                    if (error) {
+                        if (error.code === "23505") { alert("Artikel + Version existiert bereits."); return; }
+                        throw error;
+                    }
+                    artId = data.id;
+                } else {
+                    artId = parseInt(document.getElementById("sdArtikelSelect").value);
+                    const { error } = await sb.from("artikel").update(row).eq("id", artId);
+                    if (error) throw error;
+                }
+                const updates = {};
+                if (mpFile) updates.messplan_file = await uploadFileToStorage(artId, "messplan", mpFile);
+                if (zFile) updates.zeichnung_file = await uploadFileToStorage(artId, "zeichnung", zFile);
+                if (Object.keys(updates).length > 0) {
+                    await sb.from("artikel").update(updates).eq("id", artId);
+                }
+
+                await fetchArtikelList();
+                sdPopulateArtikelSelect();
+                document.getElementById("sdArtikelSelect").value = artId;
+                sdToggleArtikelForm();
+                document.getElementById("sdAfMessplanInput").value = "";
+                document.getElementById("sdAfZeichnungInput").value = "";
+                alert("Artikel gespeichert.");
+            } catch(e) { alert("Fehler: " + e.message); }
+        }
+
+        async function sdCreateFertigungsauftrag() {
+            const sel = document.getElementById("sdArtikelSelect");
+            if (!sel.value) { alert("Bitte einen Artikel wählen."); return; }
+            const nrInput = document.getElementById("sdAuftragNrInput");
+            const nr = nrInput.value.trim();
+            if (!nr) { alert("Bitte Auftragsnummer eingeben."); nrInput.focus(); return; }
+            try {
+                const { error } = await sb.from("fertigungsauftrag").insert({
+                    artikel_id: parseInt(sel.value),
+                    auftragsnummer: nr,
+                    status: "aktiv"
+                });
+                if (error) throw error;
+                nrInput.value = "";
+                alert("Fertigungsauftrag erstellt.");
+            } catch(e) { alert("Fehler: " + e.message); }
+        }
+
+        function sdSwitchTab(tab) {
+            document.querySelectorAll(".sd-tab").forEach((t, i) => {
+                t.classList.toggle("active", (tab === "zeichnung" && i === 0) || (tab === "wepruef" && i === 1));
+            });
+            document.getElementById("sdTabZeichnung").classList.toggle("active", tab === "zeichnung");
+            document.getElementById("sdTabWEPruef").classList.toggle("active", tab === "wepruef");
+
+            // Move the shared WE work area into the active tab content
+            const weWork = document.getElementById("weWorkArea");
+            if (tab === "wepruef") {
+                document.getElementById("sdTabWEPruef").appendChild(weWork);
+                weMode = 'edit';
+                document.getElementById("weEditSidebar").style.display = "";
+                document.getElementById("wePrueferSidebar").style.display = "none";
+                weWork.style.display = "flex";
+                weRenderAll();
+            } else {
+                // Move it back to wareneingangMode
+                document.getElementById("wareneingangMode").appendChild(weWork);
             }
         }
 
@@ -3324,7 +3669,14 @@
 
             // Load saved Pruefpunkte from Supabase
             await weLoadPruefpunkte();
-            document.getElementById("weModeSwitchBtn").style.display = "";
+
+            // In Wareneingang (Werker): force checklist mode
+            if (currentMode === 'wareneingang') {
+                weMode = 'check';
+                document.getElementById("weEditSidebar").style.display = "none";
+                document.getElementById("wePrueferSidebar").style.display = "";
+            }
+            weRenderAll();
         }
 
         async function weLoadPruefpunkte() {
@@ -3681,20 +4033,9 @@
         // --- Mode Toggle: Edit <-> Check ---
         function weToggleMode() {
             weMode = weMode === 'edit' ? 'check' : 'edit';
-            const btn = document.getElementById("weModeSwitchBtn");
-            btn.textContent = weMode === 'edit' ? 'Prüfmodus' : 'Bearbeiten';
-
-            // Toggle UI elements
-            const editOnly = [
-                document.getElementById("weAddCircleBtn"),
-                document.getElementById("weAddRectBtn"),
-                document.getElementById("weSaveBtn")
-            ];
-            editOnly.forEach(el => el.style.display = weMode === 'edit' ? '' : 'none');
-            document.getElementById("weCancelPlaceBtn").style.display = 'none';
 
             // Toggle sidebars
-            const editSidebar = document.querySelector("#weWorkArea > .we-sidebar:not(#wePrueferSidebar)");
+            const editSidebar = document.getElementById("weEditSidebar");
             const checkSidebar = document.getElementById("wePrueferSidebar");
             if (weMode === 'edit') {
                 editSidebar.style.display = '';
