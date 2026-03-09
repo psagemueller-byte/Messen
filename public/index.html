@@ -4687,18 +4687,53 @@
                     // Update local list
                     const art = artikelList.find(a => a.id === weCurrentArtikelId);
                     if (art) art.gesperrt = true;
-
-                    alert("GESPERRT: Mindestens ein Prüfpunkt ist NOK.\nDer Artikel wurde gesperrt und ist in der Freigabe-Übersicht sichtbar.");
-                } else {
-                    showSaveToast("FREIGEGEBEN: Alle Prüfpunkte OK.");
                 }
 
                 // Reset for next check
-                wePunktStatus.clear();
-                weRenderAll();
+                weResetForNewAuftrag(ergebnis);
             } catch(e) {
                 alert("Fehler beim Speichern: " + e.message);
             }
+        }
+
+        function weResetForNewAuftrag(ergebnis) {
+            // Clear state
+            wePunktStatus.clear();
+            wePruefpunkte = [];
+            weCurrentArtikelId = null;
+
+            // Reset form fields
+            document.getElementById("weArtikelSelect").value = "";
+            document.getElementById("weLieferantSelect").value = "";
+            document.getElementById("weLieferscheinNr").value = "";
+            document.getElementById("weGesamtmenge").value = "1";
+
+            // Hide work area
+            document.getElementById("weWorkArea").style.display = "none";
+            document.getElementById("weDrawingImg").src = "";
+            document.getElementById("weDrawingStatus").textContent = "";
+            document.getElementById("headerInfo").textContent = "";
+
+            // Show confirmation with ready-state
+            const panel = document.querySelector(".we-artikel-panel");
+            const banner = document.createElement("div");
+            const isOk = ergebnis === 'freigegeben';
+            banner.className = "we-reset-banner";
+            banner.style.cssText = `
+                margin-top: 12px; padding: 16px 20px; border-radius: 10px;
+                font-size: 1.05rem; font-weight: 600; text-align: center;
+                background: ${isOk ? '#e0f5e0' : '#fde0e0'};
+                color: ${isOk ? '#1a7a1a' : '#b91c1c'};
+                border: 2px solid ${isOk ? '#1a7a1a' : '#b91c1c'};
+            `;
+            banner.innerHTML = `${isOk ? '&#10003; FREIGEGEBEN' : '&#10007; GESPERRT'} – Ergebnis gespeichert.<br>
+                <span style="font-weight:400;font-size:0.95rem;color:#333">Bereit für neuen Auftrag – bitte Artikel wählen.</span>`;
+            // Remove previous banner if exists
+            const old = panel.querySelector(".we-reset-banner");
+            if (old) old.remove();
+            panel.appendChild(banner);
+            // Auto-hide after 8 seconds
+            setTimeout(() => { if (banner.parentNode) banner.remove(); }, 8000);
         }
 
         // Live-update checklist when Gesamtmenge changes
