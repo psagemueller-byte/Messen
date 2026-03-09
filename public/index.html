@@ -1221,11 +1221,12 @@
         }
         .we-check-item.ok .we-check-nr { background: var(--success); }
         .we-check-item.nok .we-check-nr { background: var(--danger); }
-        .we-check-title { font-weight: 600; font-size: 1rem; flex: 1; min-width: 0; }
+        .we-check-title { font-weight: 600; font-size: 1rem; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .we-check-menge {
             font-size: 0.85rem; font-weight: 600; color: var(--primary);
             white-space: nowrap; padding: 4px 12px;
             background: #e8f0fe; border-radius: 12px;
+            flex-shrink: 0;
         }
         .we-check-item.ok .we-check-menge { background: #e0f5e0; color: var(--success); }
         .we-check-item.nok .we-check-menge { background: #fde0e0; color: var(--danger); }
