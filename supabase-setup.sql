@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS artikel (
     taktzeit INTEGER NOT NULL DEFAULT 30,
     messplan_file TEXT,
     zeichnung_file TEXT,
+    gesperrt BOOLEAN NOT NULL DEFAULT false,
+    marker_positionen JSONB DEFAULT '{}',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(artikel_nr, version)
 );
@@ -44,3 +46,17 @@ CREATE POLICY "Allow public update" ON storage.objects
 
 CREATE POLICY "Allow public delete" ON storage.objects
     FOR DELETE USING (bucket_id = 'artikel-dateien');
+
+-- 5. Messhistorie-Tabelle für Audit-Log
+CREATE TABLE IF NOT EXISTS messhistorie (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    artikel_id BIGINT REFERENCES artikel(id) ON DELETE CASCADE,
+    pos_nr TEXT NOT NULL,
+    messwert DOUBLE PRECISION,
+    teil_nr INTEGER,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE messhistorie ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public read" ON messhistorie FOR SELECT USING (true);
+CREATE POLICY "Allow public insert" ON messhistorie FOR INSERT WITH CHECK (true);

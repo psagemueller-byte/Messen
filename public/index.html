@@ -504,6 +504,41 @@
         }
         .drawing-upload-area:hover { border-color: var(--primary); background: #e8f0fe; }
 
+        .messwert-input {
+            width: 70px; padding: 4px 6px; border: 2px solid var(--border);
+            border-radius: 4px; font-size: 0.85rem; text-align: center;
+        }
+        .messwert-input:focus { outline: none; border-color: var(--primary); }
+        .messwert-cell { padding: 2px !important; }
+
+        .historie-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+            z-index: 10000; display: flex; align-items: center; justify-content: center;
+        }
+        .historie-dialog {
+            background: white; border-radius: 12px; padding: 20px;
+            max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        }
+        .historie-header {
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;
+        }
+        .historie-header h3 { margin: 0; }
+        .historie-header button {
+            background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #666;
+        }
+        .historie-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        .historie-table th { background: #f0f0f0; padding: 8px; text-align: left; border-bottom: 2px solid #ddd; }
+        .historie-table td { padding: 6px 8px; border-bottom: 1px solid #eee; }
+        .historie-table tr:hover { background: #f8f8f8; }
+
+        .marker-eye-btn {
+            background: none; border: none; cursor: pointer; font-size: 1rem;
+            padding: 2px 4px; margin-left: auto; opacity: 0.6;
+        }
+        .marker-eye-btn:hover { opacity: 1; }
+        .review-pos-item.marker-hidden { opacity: 0.45; }
+
         /* Review Drawing Overlay */
         .review-overlay {
             display: none;
@@ -813,6 +848,8 @@
                 <button onclick="toggleArtikelForm('new')">+ Neu</button>
                 <button onclick="toggleArtikelForm('edit')">Bearbeiten</button>
                 <button class="danger" onclick="deleteSelectedArtikel()">Löschen</button>
+                <button id="lockBtn" onclick="toggleArtikelLock()">Sperren</button>
+                <button onclick="showMesshistorie()">Historie</button>
                 <button id="reviewDrawingBtn" onclick="openDrawingReview()" style="display:none;margin-left:auto;border-color:var(--primary);color:var(--primary);font-weight:600">Zeichnung sichten</button>
             </div>
             <div class="artikel-form" id="artikelForm">
@@ -915,6 +952,7 @@
                     <button class="calib-btn" onclick="redetectMarkers()" style="border-color:#0066cc;color:#0066cc" title="Punkte löschen und neu erkennen">&#x21bb; Neu erkennen</button>
                     <button class="calib-btn" onclick="replaceDrawing()" style="border-color:#666;color:#666" title="Andere Zeichnung laden">&#x1f4c4; Zeichnung tauschen</button>
                     <button class="calib-btn" onclick="clearAllMarkers()" style="border-color:#dc3545;color:#dc3545">Alle löschen</button>
+                    <button class="calib-btn" id="toggleMarkersBtn" onclick="toggleAllMarkersVisibility()" style="border-color:#555;color:#555">Marker ausblenden</button>
                 </div>
             </div>
             <div id="drawingUploadArea" class="drawing-upload-area" onclick="document.getElementById('drawingInput').click()">
@@ -976,11 +1014,13 @@
                 const prev = sel.value;
                 sel.innerHTML = '<option value="">– Artikel wählen –</option>';
                 for (const a of artikelList) {
-                    const label = `${a.artikel_nr} – ${a.bezeichnung}` +
+                    const lock = a.gesperrt ? "\u{1F512} " : "";
+                    const label = `${lock}${a.artikel_nr} – ${a.bezeichnung}` +
                         (a.version ? ` (V${a.version})` : "");
                     sel.innerHTML += `<option value="${a.id}">${label}</option>`;
                 }
                 if (prev) sel.value = prev;
+                updateLockBtn();
             } catch (e) { console.error("Artikelliste laden:", e); }
         }
 
@@ -996,6 +1036,7 @@
                 const sel = document.getElementById("artikelSelect");
                 const art = artikelList.find(a => a.id === parseInt(sel.value));
                 if (!art) { alert("Bitte zuerst einen Artikel auswählen."); form.classList.remove("visible"); return; }
+                if (art.gesperrt) { alert("Artikel ist gesperrt. Bitte zuerst freigeben."); form.classList.remove("visible"); return; }
                 editArtikelId = art.id;
                 document.getElementById("afArtikelNr").value = art.artikel_nr;
                 document.getElementById("afBezeichnung").value = art.bezeichnung;
@@ -1082,6 +1123,7 @@
             const sel = document.getElementById("artikelSelect");
             if (!sel.value) { alert("Bitte zuerst einen Artikel auswählen."); return; }
             const art = artikelList.find(a => a.id === parseInt(sel.value));
+            if (art.gesperrt) { alert("Artikel ist gesperrt. Bitte zuerst freigeben."); return; }
             if (!confirm(`Artikel "${art.artikel_nr} – ${art.bezeichnung}" wirklich löschen?`)) return;
             // Delete files from storage
             const { data: files } = await sb.storage.from(BUCKET).list(String(art.id));
@@ -1089,6 +1131,35 @@
                 await sb.storage.from(BUCKET).remove(files.map(f => `${art.id}/${f.name}`));
             }
             const { error } = await sb.from("artikel").delete().eq("id", art.id);
+            if (error) { alert("Fehler: " + error.message); return; }
+            await fetchArtikelList();
+        }
+
+        function updateLockBtn() {
+            const sel = document.getElementById("artikelSelect");
+            const btn = document.getElementById("lockBtn");
+            const art = artikelList.find(a => a.id === parseInt(sel.value));
+            if (art && art.gesperrt) {
+                btn.textContent = "Freigeben";
+                btn.style.borderColor = "#28a745";
+                btn.style.color = "#28a745";
+            } else {
+                btn.textContent = "Sperren";
+                btn.style.borderColor = "";
+                btn.style.color = "";
+            }
+        }
+
+        document.getElementById("artikelSelect").addEventListener("change", updateLockBtn);
+
+        async function toggleArtikelLock() {
+            const sel = document.getElementById("artikelSelect");
+            if (!sel.value) { alert("Bitte zuerst einen Artikel auswählen."); return; }
+            const art = artikelList.find(a => a.id === parseInt(sel.value));
+            const newState = !art.gesperrt;
+            const action = newState ? "sperren" : "freigeben";
+            if (!confirm(`Artikel "${art.artikel_nr}" wirklich ${action}?`)) return;
+            const { error } = await sb.from("artikel").update({ gesperrt: newState }).eq("id", art.id);
             if (error) { alert("Fehler: " + error.message); return; }
             await fetchArtikelList();
         }
@@ -1135,7 +1206,13 @@
                             drawingViewer.style.display = "block";
                             document.getElementById("drawingToolbar").style.display = "flex";
                             updateCalibPosSelect();
-                            if (zd.markers && zd.markers.length > 0) {
+                            // Prefer saved markers from Supabase, then auto-detected, then localStorage
+                            if (art.marker_positionen && Object.keys(art.marker_positionen).length > 0) {
+                                drawingMarkers = art.marker_positionen;
+                                renderMarkers();
+                                document.getElementById("drawingStatus").textContent =
+                                    `${Object.keys(drawingMarkers).length} Messpunkte geladen`;
+                            } else if (zd.markers && zd.markers.length > 0) {
                                 drawingMarkers = {};
                                 for (const m of zd.markers) {
                                     drawingMarkers[m.pos_nr] = { x: m.x, y: m.y };
@@ -1156,6 +1233,8 @@
                 document.getElementById("headerInfo").textContent =
                     `${art.artikel_nr} – ${art.bezeichnung}` +
                     (art.zeichnungs_nr ? ` | Zeichnung: ${art.zeichnungs_nr}` : "");
+
+                restoreHiddenMarkers();
 
                 // Show review button if drawing is loaded
                 document.getElementById("reviewDrawingBtn").style.display =
@@ -1523,6 +1602,69 @@
             return null;
         }
 
+        async function logMesswert(posNr, messwert) {
+            const artId = getCurrentArtikelId();
+            if (!sb || !artId) return;
+            try {
+                await sb.from("messhistorie").insert({
+                    artikel_id: artId,
+                    pos_nr: posNr,
+                    messwert: messwert,
+                    teil_nr: partCount
+                });
+            } catch(e) { console.error("Messhistorie-Log fehlgeschlagen:", e); }
+        }
+
+        function onMesswertChange(input) {
+            const val = parseFloat(input.value);
+            if (isNaN(val)) return;
+            const posNr = input.dataset.pos;
+            const ut = parseFloat(input.dataset.ut);
+            const ot = parseFloat(input.dataset.ot);
+            // Visual feedback for in/out of tolerance
+            if (!isNaN(ut) && !isNaN(ot)) {
+                if (val >= ut && val <= ot) {
+                    input.style.borderColor = "#28a745";
+                    input.style.background = "#eeffee";
+                } else {
+                    input.style.borderColor = "#dc3545";
+                    input.style.background = "#ffeeee";
+                }
+            }
+            logMesswert(posNr, val);
+        }
+
+        async function showMesshistorie() {
+            const artId = getCurrentArtikelId();
+            if (!sb || !artId) { alert("Bitte zuerst einen Artikel laden."); return; }
+            try {
+                const { data, error } = await sb.from("messhistorie")
+                    .select("*")
+                    .eq("artikel_id", artId)
+                    .order("created_at", { ascending: false })
+                    .limit(200);
+                if (error) throw error;
+                let html = `<div class="historie-overlay" id="historieOverlay" onclick="if(event.target===this)this.remove()">
+                    <div class="historie-dialog">
+                        <div class="historie-header">
+                            <h3>Messhistorie</h3>
+                            <button onclick="document.getElementById('historieOverlay').remove()">&times;</button>
+                        </div>
+                        <table class="historie-table">
+                            <thead><tr><th>Datum</th><th>Pos</th><th>Messwert</th><th>Teil-Nr</th></tr></thead><tbody>`;
+                if (data && data.length > 0) {
+                    for (const row of data) {
+                        const date = new Date(row.created_at).toLocaleString("de-DE");
+                        html += `<tr><td>${date}</td><td>${row.pos_nr}</td><td>${row.messwert != null ? row.messwert : "–"}</td><td>${row.teil_nr || "–"}</td></tr>`;
+                    }
+                } else {
+                    html += `<tr><td colspan="4" style="text-align:center;color:#999">Keine Einträge</td></tr>`;
+                }
+                html += `</tbody></table></div></div>`;
+                document.body.insertAdjacentHTML("beforeend", html);
+            } catch(e) { alert("Fehler: " + e.message); }
+        }
+
         function updateMeasurements() {
             const due = getMeasurementsDue(partCount);
             const signalBanner = document.getElementById("signalBanner");
@@ -1557,16 +1699,17 @@
                     groups[key].push(pos);
                 }
                 let html = `<table class="due-table">
-                    <thead><tr><th>Pos</th><th>Prüfmerkmal</th><th>UT</th><th>OT</th></tr></thead><tbody>`;
+                    <thead><tr><th>Pos</th><th>Prüfmerkmal</th><th>UT</th><th>OT</th><th>Messwert</th></tr></thead><tbody>`;
                 for (const [messmittel, items] of Object.entries(groups)) {
                     const groupPosNrs = items.map(p => p.pos_nr);
-                    html += `<tr class="group-header" onclick="highlightGroup(${JSON.stringify(groupPosNrs).replace(/"/g,'&quot;')})" data-group="${messmittel}"><td colspan="4">${messmittel}</td></tr>`;
+                    html += `<tr class="group-header" onclick="highlightGroup(${JSON.stringify(groupPosNrs).replace(/"/g,'&quot;')})" data-group="${messmittel}"><td colspan="5">${messmittel}</td></tr>`;
                     for (const pos of items) {
                         html += `<tr onclick="highlightDrawingPos('${pos.pos_nr}')" data-pos="${pos.pos_nr}" data-group="${messmittel}">
                             <td class="pos-cell">${pos.pos_nr}</td>
                             <td class="merkmal-cell">${pos.pruefmerkmal}</td>
                             <td class="tol-cell">${pos.ut}</td>
                             <td class="tol-cell">${pos.ot}</td>
+                            <td class="messwert-cell"><input type="number" step="any" class="messwert-input" data-pos="${pos.pos_nr}" data-ut="${pos.ut}" data-ot="${pos.ot}" placeholder="—" onclick="event.stopPropagation()" onchange="onMesswertChange(this)"></td>
                         </tr>`;
                     }
                 }
@@ -1655,6 +1798,8 @@
         let drawingMarkers = {}; // { "pos_nr": { x: 0-1, y: 0-1 } } relative coords
         let calibrationMode = false;
         let highlightedPositions = new Set(); // pos_nrs currently highlighted
+        let hiddenMarkers = new Set(); // individually hidden marker pos_nrs
+        let markersGlobalHidden = false; // global toggle
         let lastDrawingFile = null; // remember last uploaded file for re-detection
 
         const drawingUploadArea = document.getElementById("drawingUploadArea");
@@ -1814,11 +1959,13 @@
 
         function renderMarkers() {
             drawingInner.querySelectorAll(".drawing-marker").forEach(m => m.remove());
+            if (markersGlobalHidden) return;
             const hlKeys = highlightedDrawingKeys();
             const visible = visibleDrawingKeys();
             for (const [posNr, coords] of Object.entries(drawingMarkers)) {
                 // Only show markers relevant to current filter/measurement
                 if (visible.size > 0 && !visible.has(posNr)) continue;
+                if (hiddenMarkers.has(posNr)) continue;
 
                 const marker = document.createElement("div");
                 marker.className = "drawing-marker";
@@ -1950,14 +2097,79 @@
             saveMarkers();
         }
 
+        function toggleAllMarkersVisibility() {
+            markersGlobalHidden = !markersGlobalHidden;
+            const btn = document.getElementById("toggleMarkersBtn");
+            btn.textContent = markersGlobalHidden ? "Marker einblenden" : "Marker ausblenden";
+            btn.style.borderColor = markersGlobalHidden ? "var(--primary)" : "#555";
+            btn.style.color = markersGlobalHidden ? "var(--primary)" : "#555";
+            renderMarkers();
+        }
+
+        function toggleMarkerVisibility(posNr) {
+            if (hiddenMarkers.has(posNr)) {
+                hiddenMarkers.delete(posNr);
+            } else {
+                hiddenMarkers.add(posNr);
+            }
+            saveHiddenMarkers();
+            renderMarkers();
+        }
+
+        function saveHiddenMarkers() {
+            try {
+                const key = "hiddenMarkers_" + (headerInfo.zeichnungs_nr || headerInfo.artikel_nr || "default");
+                localStorage.setItem(key, JSON.stringify([...hiddenMarkers]));
+            } catch(e) {}
+        }
+
+        function restoreHiddenMarkers() {
+            try {
+                const key = "hiddenMarkers_" + (headerInfo.zeichnungs_nr || headerInfo.artikel_nr || "default");
+                const stored = localStorage.getItem(key);
+                if (stored) hiddenMarkers = new Set(JSON.parse(stored));
+                else hiddenMarkers = new Set();
+            } catch(e) { hiddenMarkers = new Set(); }
+        }
+
+        function getCurrentArtikelId() {
+            const sel = document.getElementById("artikelSelect");
+            return sel && sel.value ? parseInt(sel.value) : null;
+        }
+
+        let _saveMarkersTimer = null;
         function saveMarkers() {
+            // localStorage as immediate fallback
             try {
                 const key = "drawingMarkers_" + (headerInfo.zeichnungs_nr || headerInfo.artikel_nr || "default");
                 localStorage.setItem(key, JSON.stringify(drawingMarkers));
             } catch(e) {}
+            // Debounced Supabase save
+            clearTimeout(_saveMarkersTimer);
+            _saveMarkersTimer = setTimeout(async () => {
+                const artId = getCurrentArtikelId();
+                if (sb && artId) {
+                    try {
+                        await sb.from("artikel").update({ marker_positionen: drawingMarkers }).eq("id", artId);
+                    } catch(e) { console.error("Marker-Speicherung fehlgeschlagen:", e); }
+                }
+            }, 500);
         }
 
-        function restoreMarkers() {
+        async function restoreMarkers() {
+            // Try Supabase first
+            const artId = getCurrentArtikelId();
+            if (sb && artId) {
+                try {
+                    const { data } = await sb.from("artikel").select("marker_positionen").eq("id", artId).single();
+                    if (data && data.marker_positionen && Object.keys(data.marker_positionen).length > 0) {
+                        drawingMarkers = data.marker_positionen;
+                        renderMarkers();
+                        return;
+                    }
+                } catch(e) { console.error("Marker-Laden aus Supabase fehlgeschlagen:", e); }
+            }
+            // Fallback: localStorage
             try {
                 const key = "drawingMarkers_" + (headerInfo.zeichnungs_nr || headerInfo.artikel_nr || "default");
                 const stored = localStorage.getItem(key);
@@ -2025,10 +2237,12 @@
                 if (hasMarker) placed++; else missing++;
                 const cls = hasMarker ? "placed" : "missing";
                 const isActive = reviewSelectedPos === key;
-                html += `<div class="review-pos-item ${cls}${isActive ? " active-pos" : ""}" onclick="selectReviewPos('${key}')" data-review-pos="${key}">
+                const isHidden = hiddenMarkers.has(key);
+                html += `<div class="review-pos-item ${cls}${isActive ? " active-pos" : ""}${isHidden ? " marker-hidden" : ""}" onclick="selectReviewPos('${key}')" data-review-pos="${key}">
                     <div class="review-pos-dot"></div>
                     <span class="review-pos-name"><strong>Pos ${key}</strong> – ${pos.pruefmerkmal || ""}</span>
                     <span class="review-pos-badge">${hasMarker ? "gesetzt" : "fehlt"}</span>
+                    <button class="marker-eye-btn" onclick="event.stopPropagation();toggleMarkerVisibility('${key}');renderReviewPositions()" title="${isHidden ? 'Einblenden' : 'Ausblenden'}">${isHidden ? '\u{1F6AB}' : '\u{1F441}'}</button>
                 </div>`;
             }
             list.innerHTML = html;
