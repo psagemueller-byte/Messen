@@ -1809,7 +1809,7 @@
             document.getElementById("auftragCancelBtn").style.display = currentAuftrag.status === "aktiv" ? "" : "none";
         }
 
-        async function saveAuftragMesswerte() {
+        async function saveAuftragMesswerte(silent) {
             if (!currentAuftrag || !sb) return;
             // Collect all current input values from the measurement table
             const inputs = document.querySelectorAll(".messwert-input");
@@ -1825,7 +1825,7 @@
                 await logMesswert(posNr, val, inTol, freigegeben);
                 saved++;
             }
-            alert(`${saved} Messwert(e) gespeichert.`);
+            if (!silent) alert(`${saved} Messwert(e) gespeichert.`);
         }
 
         async function completeAuftrag(silent) {
@@ -1840,6 +1840,9 @@
             if (!silent && !confirm("Auftrag abschließen und dokumentieren?")) return;
 
             try {
+                // Save all current measurements before closing
+                await saveAuftragMesswerte(true);
+
                 const { error } = await sb.from("fertigungsauftrag").update({
                     status: "abgeschlossen",
                     completed_at: new Date().toISOString()
@@ -1862,6 +1865,55 @@
                 outOfToleranceConfirmed.clear();
                 document.getElementById("auftragPanel").classList.remove("visible");
             } catch(e) { alert("Fehler: " + e.message); }
+        }
+
+        async function loadAuftrag(auftragId) {
+            if (!sb) { alert("Datenbankverbindung fehlt."); return; }
+            try {
+                const { data, error } = await sb.from("fertigungsauftrag")
+                    .select("*, auftrag_messwerte(*)")
+                    .eq("id", auftragId)
+                    .single();
+                if (error) throw error;
+
+                // Select the matching article in the dropdown
+                const sel = document.getElementById("artikelSelect");
+                sel.value = data.artikel_id;
+
+                // Load the article (Messplan + Zeichnung)
+                await loadSelectedArtikel();
+
+                // Set as current order
+                currentAuftrag = data;
+                auftragMesswerte = {};
+                outOfToleranceConfirmed.clear();
+
+                // Populate measurement inputs with saved values
+                const messwerte = data.auftrag_messwerte || [];
+                for (const mw of messwerte) {
+                    auftragMesswerte[mw.pos_nr] = {
+                        id: mw.id,
+                        messwert: mw.messwert,
+                        in_toleranz: mw.in_toleranz,
+                        freigegeben: mw.freigegeben,
+                        teil_nr: mw.teil_nr
+                    };
+                    if (mw.freigegeben && !mw.in_toleranz) outOfToleranceConfirmed.add(mw.pos_nr);
+                    // Fill input field
+                    const input = document.querySelector(`.messwert-input[data-pos="${mw.pos_nr}"]`);
+                    if (input && mw.messwert != null) {
+                        input.value = String(mw.messwert).replace(".", ",");
+                        onMesswertInput(input);
+                    }
+                }
+
+                // Restore part count from highest teil_nr
+                const maxTeil = messwerte.reduce((max, mw) => Math.max(max, mw.teil_nr || 0), 0);
+                partCount = maxTeil;
+                document.getElementById("partCount").textContent = String(partCount);
+
+                showAuftragPanel();
+            } catch(e) { alert("Fehler beim Laden: " + e.message); }
         }
 
         async function showAuftragHistorie() {
@@ -1896,7 +1948,10 @@
                         html += `<div style="border:1px solid #ddd;border-radius:8px;padding:12px;margin-bottom:12px">
                             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
                                 <strong>${auftrag.auftragsnummer}</strong>
-                                <span class="auftrag-status ${statusCls}">${auftrag.status === "aktiv" ? "Aktiv" : "Abgeschlossen"}</span>
+                                <div style="display:flex;gap:8px;align-items:center">
+                                    <button onclick="loadAuftrag(${auftrag.id});document.getElementById('historieOverlay').remove()" style="padding:4px 12px;font-size:0.8rem;border:1.5px solid var(--primary);color:var(--primary);background:#fff;border-radius:6px;cursor:pointer">Laden</button>
+                                    <span class="auftrag-status ${statusCls}">${auftrag.status === "aktiv" ? "Aktiv" : "Abgeschlossen"}</span>
+                                </div>
                             </div>
                             <div style="font-size:0.85rem;color:#666;margin-bottom:8px">
                                 ${artName} | Erstellt: ${date} | Abgeschlossen: ${endDate}
