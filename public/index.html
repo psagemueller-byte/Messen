@@ -1167,6 +1167,68 @@
         .we-detail-form .btn-row button.primary { background: var(--primary); color: white; border-color: var(--primary); }
         .we-detail-form .btn-row button.danger { border-color: var(--danger); color: var(--danger); }
 
+        /* WE Prüfer-Checkliste */
+        .we-check-panel {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .we-check-header {
+            display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap;
+        }
+        .we-check-header h3 { margin: 0; font-size: 1.05rem; white-space: nowrap; }
+        .we-check-header input[type="number"] {
+            width: 100px; padding: 6px 8px; border: 2px solid var(--border);
+            border-radius: 6px; font-size: 0.95rem;
+        }
+        .we-check-item {
+            border: 2px solid var(--border); border-radius: 10px;
+            padding: 12px 14px; margin-bottom: 10px; transition: all 0.2s;
+        }
+        .we-check-item:hover { border-color: var(--primary); }
+        .we-check-item.checked { border-color: var(--success); background: #f0faf0; }
+        .we-check-item.highlighted { border-color: var(--warning); background: #fff8e1; }
+        .we-check-top {
+            display: flex; align-items: center; gap: 10px;
+        }
+        .we-check-top input[type="checkbox"] {
+            width: 20px; height: 20px; flex-shrink: 0; cursor: pointer; accent-color: var(--success);
+        }
+        .we-check-nr {
+            min-width: 30px; height: 30px; border-radius: 50%;
+            background: var(--primary); color: white; display: flex;
+            align-items: center; justify-content: center;
+            font-weight: 700; font-size: 0.8rem; flex-shrink: 0;
+        }
+        .we-check-item.checked .we-check-nr { background: var(--success); }
+        .we-check-title { font-weight: 600; font-size: 0.95rem; flex: 1; }
+        .we-check-menge {
+            font-size: 0.85rem; font-weight: 600; color: var(--primary);
+            white-space: nowrap; padding: 3px 10px;
+            background: #e8f0fe; border-radius: 12px;
+        }
+        .we-check-item.checked .we-check-menge { background: #e0f5e0; color: var(--success); }
+        .we-check-body {
+            margin-top: 8px; padding-left: 60px; font-size: 0.85rem; color: #555;
+        }
+        .we-check-body details { margin-bottom: 6px; }
+        .we-check-body summary { cursor: pointer; font-weight: 600; color: #444; }
+        .we-check-body .we-check-fotos {
+            display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px;
+        }
+        .we-check-body .we-check-fotos img {
+            width: 64px; height: 64px; object-fit: cover;
+            border-radius: 6px; border: 2px solid var(--border); cursor: pointer;
+        }
+        .we-check-body .we-check-fotos img:hover { border-color: var(--primary); }
+        .we-check-progress {
+            margin-top: 14px; padding: 10px 14px;
+            background: #f5f5f5; border-radius: 8px;
+            font-size: 0.9rem; font-weight: 600; text-align: center;
+        }
+        .we-check-progress.done { background: #e0f5e0; color: var(--success); }
+
         /* WE Foto Lightbox */
         .we-lightbox {
             display: none;
@@ -1411,7 +1473,8 @@
                     <option value="">– Artikel wählen –</option>
                 </select>
                 <button class="primary" onclick="weLoadArtikel()">Artikel laden</button>
-                <button onclick="weSavePruefpunkte()">Prüfpunkte speichern</button>
+                <button id="weSaveBtn" onclick="weSavePruefpunkte()">Prüfpunkte speichern</button>
+                <button id="weModeSwitchBtn" onclick="weToggleMode()" style="display:none">Prüfmodus</button>
             </div>
         </div>
 
@@ -1464,6 +1527,16 @@
                         <input type="text" id="weDetailTitle2" placeholder="z.B. Oberflächenprüfung">
                         <label>Prüfanweisung</label>
                         <textarea id="weDetailAnweisung" placeholder="Was soll der Werker prüfen? z.B. Nach dem Verzinken Oberfläche auf Beschädigungen prüfen..."></textarea>
+                        <div class="form-row">
+                            <div>
+                                <label>Prüfanteil (%)</label>
+                                <input type="number" id="weDetailProzent" min="0" max="100" value="100">
+                            </div>
+                            <div>
+                                <label>Mindestprüflos</label>
+                                <input type="number" id="weDetailMindest" min="1" value="1">
+                            </div>
+                        </div>
                         <label>Referenzfotos</label>
                         <input type="file" id="weDetailFotoInput" accept="image/*" multiple style="margin-bottom:4px">
                         <div class="we-foto-preview" id="weDetailFotos"></div>
@@ -1473,6 +1546,19 @@
                             <button onclick="weCancelDetail()">Abbrechen</button>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- Prüfer-Checkliste (im Prüfmodus sichtbar) -->
+            <div class="we-sidebar" id="wePrueferSidebar" style="display:none">
+                <div class="we-check-panel" id="wePrueferPanel">
+                    <div class="we-check-header">
+                        <h3>Prüf-Checkliste</h3>
+                        <input type="number" id="weGesamtmenge" min="1" value="1" placeholder="Menge">
+                        <span style="font-size:0.85rem;color:#666">Stück</span>
+                    </div>
+                    <div id="weChecklistItems"></div>
+                    <div class="we-check-progress" id="weCheckProgress"></div>
                 </div>
             </div>
         </div>
@@ -3182,11 +3268,13 @@
         // ===================================================================
         // WARENEINGANG (WE) MODULE
         // ===================================================================
-        let wePruefpunkte = []; // Array of { id, nr, form, x, y, titel, anweisung, fotos: [base64...] }
+        let wePruefpunkte = []; // Array of { id, nr, form, x, y, titel, anweisung, fotos, pruef_prozent, mindest_prueflos }
         let weSelectedPunktIdx = null;
         let wePlacementMode = null; // null | 'circle' | 'rect'
         let weCurrentArtikelId = null;
         let weNextNr = 1;
+        let weMode = 'edit'; // 'edit' | 'check'
+        let weCheckedPunkte = new Set();
 
         function wePopulateArtikelSelect() {
             const sel = document.getElementById("weArtikelSelect");
@@ -3236,6 +3324,7 @@
 
             // Load saved Pruefpunkte from Supabase
             await weLoadPruefpunkte();
+            document.getElementById("weModeSwitchBtn").style.display = "";
         }
 
         async function weLoadPruefpunkte() {
@@ -3255,7 +3344,9 @@
                     y: d.y,
                     titel: d.titel || "",
                     anweisung: d.anweisung || "",
-                    fotos: d.fotos || []
+                    fotos: d.fotos || [],
+                    pruef_prozent: d.pruef_prozent ?? 100,
+                    mindest_prueflos: d.mindest_prueflos ?? 1
                 }));
                 weNextNr = wePruefpunkte.length > 0
                     ? Math.max(...wePruefpunkte.map(p => parseInt(p.nr) || 0)) + 1
@@ -3271,8 +3362,12 @@
 
         function weRenderAll() {
             weRenderMarkers();
-            weRenderPunktList();
-            weUpdateDetailPanel();
+            if (weMode === 'edit') {
+                weRenderPunktList();
+                weUpdateDetailPanel();
+            } else {
+                weRenderChecklist();
+            }
         }
 
         // --- Marker placement ---
@@ -3309,7 +3404,9 @@
                 y: y,
                 titel: "",
                 anweisung: "",
-                fotos: []
+                fotos: [],
+                pruef_prozent: 100,
+                mindest_prueflos: 1
             };
             wePruefpunkte.push(punkt);
             weNextNr++;
@@ -3322,55 +3419,64 @@
         function weRenderMarkers() {
             const inner = document.getElementById("weDrawingInner");
             inner.querySelectorAll(".we-marker").forEach(m => m.remove());
+            const isCheck = weMode === 'check';
 
             for (let i = 0; i < wePruefpunkte.length; i++) {
                 const p = wePruefpunkte[i];
                 const marker = document.createElement("div");
                 marker.className = `we-marker ${p.form}`;
-                if (i === weSelectedPunktIdx) marker.classList.add("active");
+                if (isCheck && weCheckedPunkte.has(i)) {
+                    marker.style.borderColor = 'var(--success)';
+                    marker.style.background = 'rgba(76,175,80,0.18)';
+                } else if (i === weSelectedPunktIdx) {
+                    marker.classList.add("active");
+                }
                 marker.style.left = (p.x * 100) + "%";
                 marker.style.top = (p.y * 100) + "%";
+                if (isCheck) marker.style.cursor = "default";
 
                 const label = document.createElement("span");
                 label.className = "we-marker-label";
                 label.textContent = p.nr;
                 marker.appendChild(label);
 
-                const idx = i;
-                marker.addEventListener("click", (e) => {
-                    e.stopPropagation();
-                    if (wePlacementMode) return;
-                    weSelectedPunktIdx = idx;
-                    weRenderAll();
-                });
-
-                // Make marker draggable
-                marker.addEventListener("mousedown", (e) => {
-                    if (wePlacementMode) return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const img = document.getElementById("weDrawingImg");
-                    const startRect = img.getBoundingClientRect();
-
-                    function onMove(ev) {
-                        const nx = (ev.clientX - startRect.left) / startRect.width;
-                        const ny = (ev.clientY - startRect.top) / startRect.height;
-                        if (nx >= 0 && nx <= 1 && ny >= 0 && ny <= 1) {
-                            wePruefpunkte[idx].x = nx;
-                            wePruefpunkte[idx].y = ny;
-                            marker.style.left = (nx * 100) + "%";
-                            marker.style.top = (ny * 100) + "%";
-                        }
-                    }
-                    function onUp() {
-                        document.removeEventListener("mousemove", onMove);
-                        document.removeEventListener("mouseup", onUp);
+                if (!isCheck) {
+                    const idx = i;
+                    marker.addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        if (wePlacementMode) return;
                         weSelectedPunktIdx = idx;
                         weRenderAll();
-                    }
-                    document.addEventListener("mousemove", onMove);
-                    document.addEventListener("mouseup", onUp);
-                });
+                    });
+
+                    // Make marker draggable
+                    marker.addEventListener("mousedown", (e) => {
+                        if (wePlacementMode) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const img = document.getElementById("weDrawingImg");
+                        const startRect = img.getBoundingClientRect();
+
+                        function onMove(ev) {
+                            const nx = (ev.clientX - startRect.left) / startRect.width;
+                            const ny = (ev.clientY - startRect.top) / startRect.height;
+                            if (nx >= 0 && nx <= 1 && ny >= 0 && ny <= 1) {
+                                wePruefpunkte[idx].x = nx;
+                                wePruefpunkte[idx].y = ny;
+                                marker.style.left = (nx * 100) + "%";
+                                marker.style.top = (ny * 100) + "%";
+                            }
+                        }
+                        function onUp() {
+                            document.removeEventListener("mousemove", onMove);
+                            document.removeEventListener("mouseup", onUp);
+                            weSelectedPunktIdx = idx;
+                            weRenderAll();
+                        }
+                        document.addEventListener("mousemove", onMove);
+                        document.addEventListener("mouseup", onUp);
+                    });
+                }
 
                 inner.appendChild(marker);
             }
@@ -3428,6 +3534,8 @@
             document.getElementById("weDetailForm").value = p.form;
             document.getElementById("weDetailTitle2").value = p.titel;
             document.getElementById("weDetailAnweisung").value = p.anweisung;
+            document.getElementById("weDetailProzent").value = p.pruef_prozent ?? 100;
+            document.getElementById("weDetailMindest").value = p.mindest_prueflos ?? 1;
             weRenderFotos();
         }
 
@@ -3511,6 +3619,8 @@
             p.form = document.getElementById("weDetailForm").value;
             p.titel = document.getElementById("weDetailTitle2").value.trim();
             p.anweisung = document.getElementById("weDetailAnweisung").value.trim();
+            p.pruef_prozent = Math.max(0, Math.min(100, parseFloat(document.getElementById("weDetailProzent").value) || 100));
+            p.mindest_prueflos = Math.max(1, parseInt(document.getElementById("weDetailMindest").value) || 1);
             weRenderAll();
         }
 
@@ -3549,6 +3659,8 @@
                         titel: p.titel,
                         anweisung: p.anweisung,
                         fotos: p.fotos || [],
+                        pruef_prozent: p.pruef_prozent ?? 100,
+                        mindest_prueflos: p.mindest_prueflos ?? 1,
                         sort_order: i
                     }));
                     const { error } = await sb.from("we_pruefpunkte").insert(rows);
@@ -3562,6 +3674,120 @@
                 alert("Fehler beim Speichern: " + e.message);
             }
         }
+
+        // --- Mode Toggle: Edit <-> Check ---
+        function weToggleMode() {
+            weMode = weMode === 'edit' ? 'check' : 'edit';
+            const btn = document.getElementById("weModeSwitchBtn");
+            btn.textContent = weMode === 'edit' ? 'Prüfmodus' : 'Bearbeiten';
+
+            // Toggle UI elements
+            const editOnly = [
+                document.getElementById("weAddCircleBtn"),
+                document.getElementById("weAddRectBtn"),
+                document.getElementById("weSaveBtn")
+            ];
+            editOnly.forEach(el => el.style.display = weMode === 'edit' ? '' : 'none');
+            document.getElementById("weCancelPlaceBtn").style.display = 'none';
+
+            // Toggle sidebars
+            const editSidebar = document.querySelector("#weWorkArea > .we-sidebar:not(#wePrueferSidebar)");
+            const checkSidebar = document.getElementById("wePrueferSidebar");
+            if (weMode === 'edit') {
+                editSidebar.style.display = '';
+                checkSidebar.style.display = 'none';
+            } else {
+                editSidebar.style.display = 'none';
+                checkSidebar.style.display = '';
+                weCancelPlacement();
+                weCheckedPunkte.clear();
+            }
+
+            weSelectedPunktIdx = null;
+            weRenderAll();
+        }
+
+        // --- Prüfer-Checkliste ---
+        function weCalcPruefmenge(punkt, gesamt) {
+            const pct = punkt.pruef_prozent ?? 100;
+            const min = punkt.mindest_prueflos ?? 1;
+            return Math.max(min, Math.ceil(gesamt * pct / 100));
+        }
+
+        function weRenderChecklist() {
+            const container = document.getElementById("weChecklistItems");
+            const gesamt = parseInt(document.getElementById("weGesamtmenge").value) || 1;
+            const total = wePruefpunkte.length;
+            const checked = weCheckedPunkte.size;
+
+            if (total === 0) {
+                container.innerHTML = '<div style="color:#999;text-align:center;padding:20px">Keine Prüfpunkte vorhanden.</div>';
+                document.getElementById("weCheckProgress").textContent = '';
+                return;
+            }
+
+            let html = '';
+            for (let i = 0; i < wePruefpunkte.length; i++) {
+                const p = wePruefpunkte[i];
+                const isChecked = weCheckedPunkte.has(i);
+                const menge = weCalcPruefmenge(p, gesamt);
+                const cls = isChecked ? 'we-check-item checked' : 'we-check-item';
+
+                html += `<div class="${cls}" id="weCheckItem${i}">
+                    <div class="we-check-top">
+                        <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="weToggleCheck(${i}, this.checked)">
+                        <div class="we-check-nr">${p.nr}</div>
+                        <div class="we-check-title">${p.titel || 'Prüfpunkt ' + p.nr}</div>
+                        <div class="we-check-menge">${menge} Stk. prüfen</div>
+                    </div>
+                    <div class="we-check-body">`;
+
+                if (p.anweisung) {
+                    html += `<details>
+                        <summary>Prüfanweisung</summary>
+                        <p style="margin:6px 0 0;white-space:pre-wrap">${p.anweisung}</p>
+                    </details>`;
+                }
+
+                if (p.fotos && p.fotos.length > 0) {
+                    html += `<div class="we-check-fotos">`;
+                    for (let fi = 0; fi < p.fotos.length; fi++) {
+                        html += `<img src="${p.fotos[fi]}" onclick="weCheckShowFoto(${i},${fi})" alt="Foto ${fi+1}">`;
+                    }
+                    html += `</div>`;
+                }
+
+                html += `</div></div>`;
+            }
+            container.innerHTML = html;
+
+            const prog = document.getElementById("weCheckProgress");
+            if (checked >= total) {
+                prog.className = 'we-check-progress done';
+                prog.textContent = `Alle ${total} Prüfpunkte erledigt`;
+            } else {
+                prog.className = 'we-check-progress';
+                prog.textContent = `${checked} von ${total} Prüfpunkten erledigt`;
+            }
+        }
+
+        function weToggleCheck(idx, checked) {
+            if (checked) weCheckedPunkte.add(idx);
+            else weCheckedPunkte.delete(idx);
+            weRenderAll();
+        }
+
+        function weCheckShowFoto(punktIdx, fotoIdx) {
+            const src = wePruefpunkte[punktIdx].fotos[fotoIdx];
+            if (!src) return;
+            document.getElementById("weLightboxImg").src = src;
+            document.getElementById("weLightbox").classList.add("active");
+        }
+
+        // Live-update checklist when Gesamtmenge changes
+        document.getElementById("weGesamtmenge").addEventListener("input", () => {
+            if (weMode === 'check') weRenderChecklist();
+        });
 
         // ESC to close lightbox or cancel placement
         document.addEventListener("keydown", (e) => {

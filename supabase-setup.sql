@@ -106,6 +106,8 @@ CREATE TABLE IF NOT EXISTS we_pruefpunkte (
     titel TEXT NOT NULL DEFAULT '',
     anweisung TEXT NOT NULL DEFAULT '',
     fotos JSONB DEFAULT '[]',  -- Array von Base64-Strings
+    pruef_prozent DOUBLE PRECISION NOT NULL DEFAULT 100,  -- Stichproben-Prozent (0-100)
+    mindest_prueflos INTEGER NOT NULL DEFAULT 1,           -- Mindestanzahl zu prüfen
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
