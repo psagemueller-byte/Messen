@@ -2034,18 +2034,11 @@
 
             <!-- WE-Freigabe Tab -->
             <div class="sd-tab-content" id="sdTabFreigabe">
-                <!-- Gesperrte Artikel -->
-                <h3 style="margin:0 0 12px 0">Gesperrte Artikel</h3>
-                <div id="gesperrteArtikelList"></div>
-                <div id="gesperrteArtikelEmpty" style="color:#999;font-size:0.85rem;text-align:center;padding:16px;margin-bottom:24px">
-                    Keine gesperrten Artikel vorhanden.
-                </div>
-                <hr style="border:none;border-top:1px solid #e0e0e0;margin:20px 0">
-                <!-- Prüfergebnisse mit Mängeln -->
-                <h3 style="margin:0 0 12px 0">WE-Prüfergebnisse mit Mängeln</h3>
+                <h3 style="margin:0 0 12px 0">Gesperrte Prüfaufträge</h3>
+                <p style="color:#666;font-size:0.85rem;margin:0 0 16px 0">Prüfaufträge mit NOK-Bewertung. Einzelne Lieferungen können hier freigegeben oder abgeschlossen werden.</p>
                 <div id="freigabeListItems"></div>
                 <div id="freigabeListEmpty" style="color:#999;font-size:0.9rem;text-align:center;padding:24px">
-                    Keine offenen Prüfergebnisse mit Mängeln vorhanden.
+                    Keine gesperrten Prüfaufträge vorhanden.
                 </div>
             </div>
         </div>
@@ -4810,8 +4803,8 @@
                 color: ${isOk ? '#1a7a1a' : '#b91c1c'};
                 border: 2px solid ${isOk ? '#1a7a1a' : '#b91c1c'};
             `;
-            banner.innerHTML = `${isOk ? '&#10003; FREIGEGEBEN' : '&#10007; NOK – Mängel festgestellt'} – Ergebnis gespeichert.<br>
-                <span style="font-weight:400;font-size:0.95rem;color:#333">${isOk ? 'Bereit für neuen Auftrag – bitte Artikel wählen.' : 'Details unter Stammdaten → WE-Freigabe einsehbar. Bereit für neuen Auftrag.'}</span>`;
+            banner.innerHTML = `${isOk ? '&#10003; FREIGEGEBEN' : '&#10007; GESPERRT – Mängel festgestellt'} – Ergebnis gespeichert.<br>
+                <span style="font-weight:400;font-size:0.95rem;color:#333">${isOk ? 'Bereit für neuen Auftrag – bitte Artikel wählen.' : 'Prüfauftrag gesperrt. Freigabe unter Stammdaten → WE-Freigabe.'}</span>`;
             // Remove previous banner if exists
             const old = panel.querySelector(".we-reset-banner");
             if (old) old.remove();
@@ -5197,55 +5190,9 @@
         // =============================================
         // WE-Freigabe Übersicht (Stammdaten)
         // =============================================
-
-        function renderGesperrteArtikel() {
-            const container = document.getElementById("gesperrteArtikelList");
-            const empty = document.getElementById("gesperrteArtikelEmpty");
-            if (!container) return;
-
-            const gesperrte = artikelList.filter(a => a.gesperrt);
-            if (gesperrte.length === 0) {
-                container.innerHTML = "";
-                empty.style.display = "";
-                return;
-            }
-            empty.style.display = "none";
-
-            let html = "";
-            for (const a of gesperrte) {
-                const label = `${a.artikel_nr} – ${a.bezeichnung}${a.version ? ` (V${a.version})` : ""}`;
-                html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;margin-bottom:8px;background:#fef0f0;border:1.5px solid #f5c6cb;border-radius:8px">
-                    <div>
-                        <span style="font-size:1.1rem;margin-right:6px">&#128274;</span>
-                        <strong>${label}</strong>
-                    </div>
-                    <button onclick="freigabeArtikelEntsperren(${a.id})" style="padding:6px 16px;font-size:0.9rem;font-weight:600;border:1.5px solid #28a745;color:#28a745;background:#fff;border-radius:6px;cursor:pointer">Freigeben</button>
-                </div>`;
-            }
-            container.innerHTML = html;
-        }
-
-        async function freigabeArtikelEntsperren(artikelId) {
-            if (!confirm("Artikel wirklich freigeben (Sperre aufheben)?")) return;
-            if (!sb) return;
-            try {
-                await sb.from("artikel").update({ gesperrt: false }).eq("id", artikelId);
-                const art = artikelList.find(a => a.id === artikelId);
-                if (art) art.gesperrt = false;
-                renderGesperrteArtikel();
-                // Update dropdowns
-                if (typeof sdPopulateArtikelSelect === 'function') sdPopulateArtikelSelect();
-                if (typeof wePopulateArtikelSelect === 'function') wePopulateArtikelSelect();
-                showSaveToast("Artikel freigegeben.");
-            } catch(e) {
-                alert("Fehler: " + e.message);
-            }
-        }
-
         let freigabeListe = [];
 
         async function loadFreigabeListe() {
-            renderGesperrteArtikel();
             if (!sb) return;
             try {
                 const { data, error } = await sb.from("we_pruefergebnisse")
@@ -5284,11 +5231,16 @@
 
                 html += `<div class="freigabe-card">
                     <div class="freigabe-card-header">
-                        <div class="freigabe-card-title">${artLabel}</div>
-                        <div class="freigabe-card-date">${datum}</div>
-                    </div>
-                    <div style="font-size:0.9rem;color:#555;margin-bottom:6px">
-                        Gesamtmenge: ${fg.gesamtmenge} Stück${lieferantLabel ? ' | ' + lieferantLabel : ''}${lsLabel ? ' | ' + lsLabel : ''}
+                        <div>
+                            <div class="freigabe-card-title">${artLabel}</div>
+                            <div style="font-size:0.85rem;color:#555;margin-top:2px">
+                                ${lieferantLabel}${lieferantLabel && lsLabel ? ' | ' : ''}${lsLabel} | ${fg.gesamtmenge} Stück
+                            </div>
+                        </div>
+                        <div style="text-align:right">
+                            <div class="freigabe-card-date">${datum}</div>
+                            <div style="font-size:0.75rem;padding:2px 8px;background:#fde0e0;color:#b91c1c;border-radius:4px;font-weight:600;display:inline-block;margin-top:4px">GESPERRT</div>
+                        </div>
                     </div>`;
 
                 for (const pp of punkte) {
@@ -5314,20 +5266,20 @@
                 }
 
                 html += `<div class="freigabe-actions">
-                    <button class="primary" onclick="freigabeFreigeben(${fg.id}, ${fg.artikel_id})">Freigeben</button>
-                    <button class="secondary" onclick="freigabeAbschliessen(${fg.id})">Abgeschlossen</button>
+                    <button class="primary" onclick="freigabeFreigeben(${fg.id})">Lieferung freigeben</button>
+                    <button class="secondary" onclick="freigabeAbschliessen(${fg.id})">Gesperrt abschließen</button>
                 </div></div>`;
             }
             container.innerHTML = html;
         }
 
-        async function freigabeFreigeben(ergebnisId, artikelId) {
-            if (!confirm("Prüfergebnis trotz NOK-Bewertungen als freigegeben markieren?")) return;
+        async function freigabeFreigeben(ergebnisId) {
+            if (!confirm("Diesen Prüfauftrag trotz NOK-Bewertungen freigeben?")) return;
             if (!sb) return;
             try {
                 await sb.from("we_pruefergebnisse").update({ ergebnis: "freigegeben" }).eq("id", ergebnisId);
                 await loadFreigabeListe();
-                showSaveToast("Prüfergebnis wurde als freigegeben markiert.");
+                showSaveToast("Prüfauftrag freigegeben.");
             } catch(e) {
                 alert("Fehler: " + e.message);
             }
