@@ -7,6 +7,8 @@ welche Maße wann und wie zu messen sind.
 
 import os
 import re
+import io
+import csv
 import json
 import math
 import base64
@@ -572,3 +574,160 @@ def verify_pin():
     if pin == STAMMDATEN_PIN:
         return jsonify({"ok": True})
     return jsonify({"ok": False, "error": "Falscher PIN"}), 401
+
+
+# --- Artikel-Import aus CSV ---
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://gnaqzjdocadcilzgippr.supabase.co")
+SUPABASE_ANON_KEY = os.environ.get(
+    "SUPABASE_ANON_KEY",
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImduYXF6amRvY2FkY2lsemdpcHByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3ODI5NzAsImV4cCI6MjA4ODM1ODk3MH0.d_mIv-yy1jXEUc2TIzH5uSItzruh1KDvXpn_wV82thw"
+)
+
+
+def _supabase_request(method, path, body=None, params=None):
+    """Make a request to Supabase REST API."""
+    import urllib.request
+    import urllib.parse
+
+    url = f"{SUPABASE_URL}/rest/v1/{path}"
+    if params:
+        url += "?" + urllib.parse.urlencode(params, doseq=True)
+
+    headers = {
+        "apikey": SUPABASE_ANON_KEY,
+        "Authorization": f"Bearer {SUPABASE_ANON_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation",
+    }
+
+    data_bytes = json.dumps(body).encode() if body else None
+    req = urllib.request.Request(url, data=data_bytes, headers=headers, method=method)
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read().decode())
+
+
+@app.route("/api/artikel-import", methods=["POST"])
+def artikel_import():
+    """Import articles from a CSV file.
+
+    CSV must have columns: artikel_nr, bezeichnung, version
+    Delimiter is auto-detected (semicolon or comma).
+
+    Rules:
+    - New artikel_nr+version → INSERT
+    - Existing but bezeichnung changed → UPDATE bezeichnung only
+    - Existing and same → SKIP
+    - Locked (gesperrt) articles → SKIP
+    """
+    if not SUPABASE_ANON_KEY:
+        return jsonify({"error": "Supabase nicht konfiguriert"}), 500
+
+    if "file" not in request.files:
+        return jsonify({"error": "Keine Datei hochgeladen"}), 400
+
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"error": "Keine Datei ausgewählt"}), 400
+
+    try:
+        raw = file.read()
+        # Try UTF-8, fallback to latin-1
+        try:
+            text = raw.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            text = raw.decode("latin-1")
+
+        # Auto-detect delimiter
+        first_line = text.split("\n")[0]
+        delimiter = ";" if ";" in first_line else ","
+
+        reader = csv.DictReader(io.StringIO(text), delimiter=delimiter)
+
+        # Normalize field names (strip whitespace, lowercase)
+        if not reader.fieldnames:
+            return jsonify({"error": "CSV ist leer oder hat keinen Header"}), 400
+
+        field_map = {}
+        for f in reader.fieldnames:
+            clean = f.strip().lower().replace("-", "_").replace(" ", "_")
+            field_map[f] = clean
+
+        required = {"artikel_nr", "bezeichnung", "version"}
+        found = set(field_map.values())
+        missing = required - found
+        if missing:
+            return jsonify({
+                "error": f"Fehlende Spalten: {', '.join(missing)}. "
+                         f"Gefunden: {', '.join(field_map.values())}"
+            }), 400
+
+        # Parse rows
+        import_rows = []
+        for row in reader:
+            mapped = {field_map[k]: v.strip() for k, v in row.items() if k in field_map}
+            art_nr = mapped.get("artikel_nr", "").strip()
+            bez = mapped.get("bezeichnung", "").strip()
+            ver = mapped.get("version", "").strip()
+            if art_nr:
+                import_rows.append({"artikel_nr": art_nr, "bezeichnung": bez, "version": ver})
+
+        if not import_rows:
+            return jsonify({"error": "Keine gültigen Zeilen in der CSV gefunden"}), 400
+
+        # Fetch existing articles from Supabase
+        existing = _supabase_request("GET", "artikel", params={
+            "select": "id,artikel_nr,bezeichnung,version,gesperrt"
+        })
+
+        # Build lookup: (artikel_nr, version) → {id, bezeichnung, gesperrt}
+        lookup = {}
+        for art in existing:
+            key = (art["artikel_nr"], art.get("version", ""))
+            lookup[key] = art
+
+        inserted = 0
+        updated = 0
+        skipped = 0
+        errors = []
+
+        for row in import_rows:
+            key = (row["artikel_nr"], row["version"])
+            existing_art = lookup.get(key)
+
+            if existing_art is None:
+                # New article → INSERT
+                try:
+                    _supabase_request("POST", "artikel", body={
+                        "artikel_nr": row["artikel_nr"],
+                        "bezeichnung": row["bezeichnung"],
+                        "version": row["version"]
+                    })
+                    inserted += 1
+                except Exception as e:
+                    errors.append(f"{row['artikel_nr']} v{row['version']}: {str(e)}")
+            elif existing_art.get("gesperrt"):
+                # Locked → SKIP
+                skipped += 1
+            elif existing_art["bezeichnung"] != row["bezeichnung"]:
+                # Bezeichnung changed → UPDATE
+                try:
+                    _supabase_request("PATCH", f"artikel?id=eq.{existing_art['id']}", body={
+                        "bezeichnung": row["bezeichnung"]
+                    })
+                    updated += 1
+                except Exception as e:
+                    errors.append(f"{row['artikel_nr']} v{row['version']}: {str(e)}")
+            else:
+                # Same → SKIP
+                skipped += 1
+
+        return jsonify({
+            "inserted": inserted,
+            "updated": updated,
+            "skipped": skipped,
+            "total": len(import_rows),
+            "errors": errors
+        })
+
+    except Exception as e:
+        return jsonify({"error": f"Import-Fehler: {str(e)}"}), 500

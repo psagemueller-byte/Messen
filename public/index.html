@@ -1941,6 +1941,17 @@
             </div>
         </div>
 
+        <!-- Artikel-Import aus ERP -->
+        <div style="margin-bottom:16px;padding:16px 20px;background:#f0f4ff;border:1.5px solid #d0d8f0;border-radius:10px">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                <h4 style="margin:0;font-size:1rem">ERP-Import</h4>
+                <input type="file" id="artikelImportFile" accept=".csv,.txt" style="font-size:0.9rem">
+                <button class="primary" onclick="artikelImportStart()" style="padding:6px 18px;font-size:0.9rem">CSV importieren</button>
+                <span id="artikelImportResult" style="font-size:0.9rem;color:#555"></span>
+            </div>
+            <div style="font-size:0.8rem;color:#888;margin-top:6px">CSV mit Spalten: artikel_nr, bezeichnung, version (Semikolon oder Komma getrennt)</div>
+        </div>
+
         <!-- Stammdaten Tabs: Zeichnung + WE-Prüfpunkte -->
         <div id="sdTabArea" style="display:none">
             <div class="sd-tabs">
@@ -4010,6 +4021,48 @@
                 document.getElementById("sdAfTaktzeit").value = art.taktzeit;
                 document.getElementById("sdAfMessplanStatus").textContent = art.messplan_file ? "OK" : "Keine Datei";
                 document.getElementById("sdAfZeichnungStatus").textContent = art.zeichnung_file ? "OK" : "Keine Datei";
+            }
+        }
+
+        async function artikelImportStart() {
+            const fileInput = document.getElementById("artikelImportFile");
+            const resultEl = document.getElementById("artikelImportResult");
+            if (!fileInput.files.length) {
+                alert("Bitte zuerst eine CSV-Datei auswählen.");
+                return;
+            }
+            resultEl.textContent = "Importiere...";
+            resultEl.style.color = "#555";
+
+            const fd = new FormData();
+            fd.append("file", fileInput.files[0]);
+
+            try {
+                const resp = await fetch("/api/artikel-import", { method: "POST", body: fd });
+                const data = await resp.json();
+                if (!resp.ok) {
+                    resultEl.textContent = data.error || "Fehler beim Import";
+                    resultEl.style.color = "#b91c1c";
+                    return;
+                }
+                const parts = [];
+                if (data.inserted) parts.push(`${data.inserted} neu`);
+                if (data.updated) parts.push(`${data.updated} aktualisiert`);
+                if (data.skipped) parts.push(`${data.skipped} übersprungen`);
+                resultEl.textContent = parts.join(", ") || "Keine Änderungen";
+                resultEl.style.color = data.inserted || data.updated ? "#2e7d32" : "#555";
+                if (data.errors && data.errors.length) {
+                    resultEl.textContent += ` | ${data.errors.length} Fehler`;
+                    console.warn("Import-Fehler:", data.errors);
+                }
+                // Refresh article list
+                await fetchArtikelList();
+                if (typeof sdPopulateArtikelSelect === 'function') sdPopulateArtikelSelect();
+                if (typeof wePopulateArtikelSelect === 'function') wePopulateArtikelSelect();
+                fileInput.value = "";
+            } catch(e) {
+                resultEl.textContent = "Fehler: " + e.message;
+                resultEl.style.color = "#b91c1c";
             }
         }
 
