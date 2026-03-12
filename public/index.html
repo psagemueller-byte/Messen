@@ -1619,8 +1619,47 @@
         }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        /* Login Screen */
+        #loginOverlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(135deg, #0066cc 0%, #004499 100%);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 10000;
+        }
+        #loginOverlay.hidden { display: none; }
+        .login-box {
+            background: white; border-radius: 16px; padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3); width: 360px; text-align: center;
+        }
+        .login-box h2 { margin-bottom: 8px; color: #333; }
+        .login-box p { color: #666; margin-bottom: 24px; font-size: 0.9rem; }
+        .login-box input {
+            width: 100%; padding: 12px 16px; border: 2px solid #ddd; border-radius: 8px;
+            font-size: 1rem; margin-bottom: 12px; outline: none;
+        }
+        .login-box input:focus { border-color: #0066cc; }
+        .login-box button {
+            width: 100%; padding: 12px; background: #0066cc; color: white; border: none;
+            border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer;
+        }
+        .login-box button:hover { background: #0055aa; }
+        .login-error { color: #dc3545; font-size: 0.85rem; margin-top: 8px; min-height: 20px; }
+    </style>
 </head>
 <body>
+    <!-- Login Overlay -->
+    <div id="loginOverlay">
+        <div class="login-box">
+            <h2>Qualitätssicherung</h2>
+            <p>Bitte anmelden</p>
+            <input type="text" id="loginUser" placeholder="Benutzername" autocomplete="username">
+            <input type="password" id="loginPass" placeholder="Passwort" autocomplete="current-password">
+            <button onclick="doLogin()">Anmelden</button>
+            <div class="login-error" id="loginError"></div>
+        </div>
+    </div>
+
     <div class="header">
         <h1>Qualitätssicherung</h1>
         <div class="info" id="headerInfo">Bereich wählen</div>
@@ -2094,16 +2133,86 @@
         let auftragMesswerte = {}; // { "pos_nr": { messwert, in_toleranz, freigegeben, teil_nr } }
         let outOfToleranceConfirmed = new Set(); // pos_nrs confirmed despite out-of-tolerance
 
-        // --- Supabase Client ---
-        const SUPABASE_URL = "https://gnaqzjdocadcilzgippr.supabase.co";
-        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImduYXF6amRvY2FkY2lsemdpcHByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3ODI5NzAsImV4cCI6MjA4ODM1ODk3MH0.d_mIv-yy1jXEUc2TIzH5uSItzruh1KDvXpn_wV82thw";
+        // --- Auth Token ---
+        let authToken = sessionStorage.getItem("authToken") || "";
+
+        function authHeaders() {
+            return { "X-Auth-Token": authToken };
+        }
+
+        async function authFetch(url, options = {}) {
+            options.headers = { ...(options.headers || {}), ...authHeaders() };
+            const res = await fetch(url, options);
+            if (res.status === 401) {
+                sessionStorage.removeItem("authToken");
+                authToken = "";
+                document.getElementById("loginOverlay").classList.remove("hidden");
+                throw new Error("Sitzung abgelaufen");
+            }
+            return res;
+        }
+
+        async function doLogin() {
+            const user = document.getElementById("loginUser").value.trim();
+            const pass = document.getElementById("loginPass").value;
+            const errEl = document.getElementById("loginError");
+            errEl.textContent = "";
+            try {
+                const res = await fetch("/api/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ username: user, password: pass })
+                });
+                const json = await res.json();
+                if (json.ok) {
+                    authToken = json.token;
+                    sessionStorage.setItem("authToken", authToken);
+                    document.getElementById("loginOverlay").classList.add("hidden");
+                    initApp();
+                } else {
+                    errEl.textContent = json.error || "Login fehlgeschlagen";
+                }
+            } catch(e) {
+                errEl.textContent = "Verbindungsfehler";
+            }
+        }
+
+        // Enter-Taste im Login
+        document.addEventListener("DOMContentLoaded", () => {
+            document.getElementById("loginPass").addEventListener("keydown", (e) => {
+                if (e.key === "Enter") doLogin();
+            });
+            document.getElementById("loginUser").addEventListener("keydown", (e) => {
+                if (e.key === "Enter") document.getElementById("loginPass").focus();
+            });
+            // Auto-login if token exists
+            if (authToken) {
+                fetch("/api/config", { headers: { "X-Auth-Token": authToken } })
+                    .then(r => { if (r.ok) { document.getElementById("loginOverlay").classList.add("hidden"); initApp(); } else { sessionStorage.removeItem("authToken"); authToken = ""; } })
+                    .catch(() => {});
+            }
+        });
+
+        // --- Supabase Client (loaded after login) ---
         let sb = null;
-        const BUCKET = "artikel-dateien";
-        try {
-            const { createClient } = window.supabase || {};
-            if (createClient) sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            else console.error("Supabase JS nicht geladen");
-        } catch(e) { console.error("Supabase init fehlgeschlagen:", e); }
+        let BUCKET = "artikel-dateien";
+
+        async function initApp() {
+            // Load Supabase config from server
+            try {
+                const res = await authFetch("/api/config");
+                const cfg = await res.json();
+                const { createClient } = window.supabase || {};
+                if (createClient) {
+                    sb = createClient(cfg.supabase_url, cfg.supabase_anon_key);
+                    BUCKET = cfg.bucket || "artikel-dateien";
+                }
+            } catch(e) { console.error("Config laden fehlgeschlagen:", e); }
+
+            // Load data
+            await fetchArtikelList();
+            await fetchLieferanten();
+        }
 
         // --- Lieferanten (via Backend-API) ---
         let lieferantenList = [];
@@ -2111,7 +2220,7 @@
         async function fetchLieferanten() {
             lieferantenList = [];
             try {
-                const res = await fetch("/api/lieferanten");
+                const res = await authFetch("/api/lieferanten");
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const json = await res.json();
                 lieferantenList = json.lieferanten || [];
@@ -2320,7 +2429,7 @@
                     if (error) throw error;
                     const fd = new FormData();
                     fd.append("file", blob, art.messplan_file.split("/").pop());
-                    const res = await fetch("/api/upload", { method: "POST", body: fd });
+                    const res = await authFetch("/api/upload", { method: "POST", body: fd });
                     const result = await res.json();
                     if (result.positions) {
                         loadData(result, `Artikel ${art.artikel_nr}`);
@@ -2335,7 +2444,7 @@
                     if (error) throw error;
                     const fd = new FormData();
                     fd.append("file", blob, art.zeichnung_file.split("/").pop());
-                    const res = await fetch("/api/upload-drawing", { method: "POST", body: fd });
+                    const res = await authFetch("/api/upload-drawing", { method: "POST", body: fd });
                     const zd = await res.json();
                     if (zd.image) {
                         drawingImg.src = zd.image;
@@ -2404,8 +2513,7 @@
             st.className = "file-status" + (this.files[0] ? " ok" : "");
         });
 
-        // Load article list on page load
-        fetchArtikelList();
+        // Article list is loaded by initApp() after login
 
         // --- Audio ---
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -2469,7 +2577,7 @@
 
             uploadArea.innerHTML = '<div class="icon">&#9203;</div><p>Wird eingelesen...</p>';
 
-            fetch("/api/upload", {
+            authFetch("/api/upload", {
                 method: "POST",
                 body: formData
             })
@@ -3245,7 +3353,7 @@
                 const formData = new FormData();
                 formData.append("file", file);
 
-                fetch("/api/upload-drawing", { method: "POST", body: formData })
+                authFetch("/api/upload-drawing", { method: "POST", body: formData })
                     .then(r => r.json())
                     .then(data => {
                         if (data.error) {
@@ -3638,7 +3746,7 @@
                         if (!error) {
                             const fd = new FormData();
                             fd.append("file", blob, art.messplan_file.split("/").pop());
-                            const res = await fetch("/api/upload", { method: "POST", body: fd });
+                            const res = await authFetch("/api/upload", { method: "POST", body: fd });
                             const result = await res.json();
                             if (result.positions) loadData(result, `Artikel ${art.artikel_nr}`);
                         }
@@ -3876,7 +3984,7 @@
             const errEl = document.getElementById("pinError");
             errEl.textContent = "";
             try {
-                const res = await fetch("/api/verify-pin", {
+                const res = await authFetch("/api/verify-pin", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ pin })
@@ -3949,7 +4057,7 @@
                         if (!mpErr) {
                             const mpFd = new FormData();
                             mpFd.append("file", mpBlob, art.messplan_file.split("/").pop());
-                            const mpRes = await fetch("/api/upload", { method: "POST", body: mpFd });
+                            const mpRes = await authFetch("/api/upload", { method: "POST", body: mpFd });
                             const mpData = await mpRes.json();
                             if (mpData.positions) loadData(mpData, `Artikel ${art.artikel_nr}`);
                         }
@@ -3963,7 +4071,7 @@
                         if (!error) {
                             const fd = new FormData();
                             fd.append("file", blob, art.zeichnung_file.split("/").pop());
-                            const res = await fetch("/api/upload-drawing", { method: "POST", body: fd });
+                            const res = await authFetch("/api/upload-drawing", { method: "POST", body: fd });
                             const zd = await res.json();
                             if (zd.image) {
                                 // Set WE drawing
@@ -4038,7 +4146,7 @@
             fd.append("file", fileInput.files[0]);
 
             try {
-                const resp = await fetch("/api/artikel-import", { method: "POST", body: fd });
+                const resp = await authFetch("/api/artikel-import", { method: "POST", body: fd });
                 const data = await resp.json();
                 if (!resp.ok) {
                     resultEl.textContent = data.error || "Fehler beim Import";
@@ -4306,7 +4414,7 @@
                     if (error) throw error;
                     const fd = new FormData();
                     fd.append("file", blob, art.zeichnung_file.split("/").pop());
-                    const res = await fetch("/api/upload-drawing", { method: "POST", body: fd });
+                    const res = await authFetch("/api/upload-drawing", { method: "POST", body: fd });
                     const zd = await res.json();
                     if (zd.image) {
                         const img = document.getElementById("weDrawingImg");

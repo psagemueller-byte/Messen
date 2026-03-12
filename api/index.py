@@ -12,7 +12,11 @@ import csv
 import json
 import math
 import base64
+import hmac
+import hashlib
+import time
 import tempfile
+from functools import wraps
 from flask import Flask, request, jsonify
 from werkzeug.utils import secure_filename
 import pdfplumber
@@ -22,6 +26,68 @@ import numpy as np
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB
+
+# --- Authentication ---
+APP_USER = os.environ.get("APP_USER", "admin")
+APP_PASS = os.environ.get("APP_PASS", "QS2026!")
+APP_SECRET = os.environ.get("APP_SECRET", "qs-messen-secret-key-change-me")
+
+def _make_token(username):
+    """Create a simple HMAC token."""
+    ts = str(int(time.time()))
+    sig = hmac.new(APP_SECRET.encode(), f"{username}:{ts}".encode(), hashlib.sha256).hexdigest()
+    return f"{username}:{ts}:{sig}"
+
+def _verify_token(token):
+    """Verify an auth token. Valid for 24 hours."""
+    try:
+        parts = token.split(":")
+        if len(parts) != 3:
+            return False
+        username, ts, sig = parts
+        expected = hmac.new(APP_SECRET.encode(), f"{username}:{ts}".encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig, expected):
+            return False
+        if time.time() - int(ts) > 86400:
+            return False
+        return True
+    except Exception:
+        return False
+
+def require_auth(f):
+    """Decorator to require auth token on API endpoints."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = request.headers.get("X-Auth-Token", "")
+        if not _verify_token(token):
+            return jsonify({"error": "Nicht autorisiert"}), 401
+        return f(*args, **kwargs)
+    return decorated
+
+
+@app.route("/api/login", methods=["POST"])
+def login():
+    data = request.get_json(silent=True) or {}
+    username = data.get("username", "")
+    password = data.get("password", "")
+    if username == APP_USER and password == APP_PASS:
+        token = _make_token(username)
+        return jsonify({"ok": True, "token": token})
+    return jsonify({"ok": False, "error": "Falscher Benutzername oder Passwort"}), 401
+
+
+@app.route("/api/config", methods=["GET"])
+@require_auth
+def get_config():
+    """Return Supabase config to authenticated clients only."""
+    return jsonify({
+        "supabase_url": os.environ.get("SUPABASE_URL", "https://gnaqzjdocadcilzgippr.supabase.co"),
+        "supabase_anon_key": os.environ.get(
+            "SUPABASE_ANON_KEY",
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImduYXF6amRvY2FkY2lsemdpcHByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3ODI5NzAsImV4cCI6MjA4ODM1ODk3MH0.d_mIv-yy1jXEUc2TIzH5uSItzruh1KDvXpn_wV82thw"
+        ),
+        "bucket": "artikel-dateien"
+    })
 
 
 def parse_pruefintervall(text):
@@ -154,6 +220,7 @@ def extract_pruefplan_from_pdf(filepath):
 
 
 @app.route("/api/upload", methods=["POST"])
+@require_auth
 def upload_pdf():
     """Upload a Prüfplan PDF and extract measurement data."""
     if "file" not in request.files:
@@ -180,6 +247,7 @@ def upload_pdf():
 
 
 @app.route("/api/debug-pdf", methods=["POST"])
+@require_auth
 def debug_pdf():
     """Upload a PDF and return raw table data for debugging column mapping."""
     if "file" not in request.files:
@@ -206,6 +274,7 @@ def debug_pdf():
 
 
 @app.route("/api/manual-entry", methods=["POST"])
+@require_auth
 def manual_entry():
     """Accept manually entered inspection plan data (JSON)."""
     data = request.get_json()
@@ -218,6 +287,7 @@ def manual_entry():
 
 
 @app.route("/api/check-measurements", methods=["POST"])
+@require_auth
 def check_measurements():
     """Given a part count and positions, return which measurements are due now."""
     data = request.get_json()
@@ -239,6 +309,7 @@ def check_measurements():
 
 
 @app.route("/api/upload-drawing", methods=["POST"])
+@require_auth
 def upload_drawing():
     """Upload a technical drawing PDF. Extracts red circle markers with position
     numbers and renders page 1 as a PNG image for display.
@@ -521,9 +592,12 @@ def _extract_markers_vector(doc, page, pw, ph):
 AIRTABLE_PAT = os.environ.get("AIRTABLE_PAT", "")
 AIRTABLE_BASE = os.environ.get("AIRTABLE_BASE", "appA1PKnY997TR3gR")
 AIRTABLE_TABLE = os.environ.get("AIRTABLE_TABLE", "tblWtedsHnyV2kOPk")
+AIRTABLE_ARTIKEL_TABLE = os.environ.get("AIRTABLE_ARTIKEL_TABLE", "tblfkM8tedLRqnImS")
+AIRTABLE_ADRESSEN_TABLE = os.environ.get("AIRTABLE_ADRESSEN_TABLE", "tblJQ0TKRCdAbVhfS")
 
 
 @app.route("/api/lieferanten", methods=["GET"])
+@require_auth
 def get_lieferanten():
     """Fetch supplier names from Airtable."""
     import urllib.request
@@ -568,6 +642,7 @@ STAMMDATEN_PIN = os.environ.get("STAMMDATEN_PIN", "1234")
 
 
 @app.route("/api/verify-pin", methods=["POST"])
+@require_auth
 def verify_pin():
     data = request.get_json(silent=True) or {}
     pin = str(data.get("pin", ""))
@@ -607,6 +682,7 @@ def _supabase_request(method, path, body=None, params=None):
 
 
 @app.route("/api/artikel-import", methods=["POST"])
+@require_auth
 def artikel_import():
     """Import articles from a CSV file.
 
@@ -731,3 +807,88 @@ def artikel_import():
 
     except Exception as e:
         return jsonify({"error": f"Import-Fehler: {str(e)}"}), 500
+
+
+# --- Airtable: Artikel-Stammdaten ---
+def _airtable_fetch_all(table_id, fields=None):
+    """Fetch all records from an Airtable table with pagination."""
+    import urllib.request
+    import urllib.parse
+
+    if not AIRTABLE_PAT:
+        return []
+
+    records = []
+    offset = None
+    while True:
+        params = {}
+        if fields:
+            for f in fields:
+                params.setdefault("fields[]", []).append(f)
+        if offset:
+            params["offset"] = offset
+        qs = urllib.parse.urlencode(params, doseq=True)
+        url = f"https://api.airtable.com/v0/{AIRTABLE_BASE}/{table_id}?{qs}"
+        req = urllib.request.Request(url, headers={
+            "Authorization": f"Bearer {AIRTABLE_PAT}"
+        })
+        with urllib.request.urlopen(req) as resp:
+            data = json.loads(resp.read().decode())
+        records.extend(data.get("records", []))
+        offset = data.get("offset")
+        if not offset:
+            break
+    return records
+
+
+@app.route("/api/artikel-stamm", methods=["GET"])
+@require_auth
+def get_artikel_stamm():
+    """Fetch article master data from Airtable."""
+    try:
+        records = _airtable_fetch_all(AIRTABLE_ARTIKEL_TABLE)
+        artikel = []
+        for rec in records:
+            f = rec.get("fields", {})
+            artikel.append({
+                "artikel_nr": f.get("artikel_nr", ""),
+                "bezeichnung": f.get("bezeichnung", ""),
+                "kurzbezeichnung": f.get("Kurzbezeichnung", ""),
+                "gewicht": f.get("gewicht", ""),
+                "bestellnummer": f.get("bestellnummer", ""),
+                "zeichnungs_nr": f.get("zeichnungs_nr", ""),
+                "version": f.get("version", ""),
+            })
+        artikel.sort(key=lambda x: x["artikel_nr"])
+        return jsonify({"artikel": artikel, "total": len(artikel)})
+    except Exception as e:
+        return jsonify({"error": f"Airtable Fehler: {str(e)}"}), 500
+
+
+@app.route("/api/adressen", methods=["GET"])
+@require_auth
+def get_adressen():
+    """Fetch addresses (customers/suppliers) from Airtable."""
+    try:
+        records = _airtable_fetch_all(AIRTABLE_ADRESSEN_TABLE)
+        adressen = []
+        for rec in records:
+            f = rec.get("fields", {})
+            adressen.append({
+                "kunden_nr": f.get("kunden_nr", ""),
+                "name": f.get("name", ""),
+                "anschrift_1": f.get("anschrift_1", ""),
+                "anschrift_2": f.get("anschrift_2", ""),
+                "strasse": f.get("strasse", ""),
+                "plz": f.get("plz", ""),
+                "ort": f.get("ort", ""),
+                "land": f.get("land", ""),
+                "telefon": f.get("telefon", ""),
+                "email": f.get("email", ""),
+                "zahlungsbedingung": f.get("zahlungsbedingung", ""),
+                "versandbedingung": f.get("versandbedingung", ""),
+            })
+        adressen.sort(key=lambda x: x["name"])
+        return jsonify({"adressen": adressen, "total": len(adressen)})
+    except Exception as e:
+        return jsonify({"error": f"Airtable Fehler: {str(e)}"}), 500
