@@ -841,6 +841,31 @@ def _airtable_fetch_all(table_id, fields=None):
     return records
 
 
+def _airtable_search(table_id, formula, fields=None, max_records=50):
+    """Search Airtable with filterByFormula. Returns up to max_records."""
+    import urllib.request
+    import urllib.parse
+
+    if not AIRTABLE_PAT:
+        return []
+
+    params = {
+        "filterByFormula": formula,
+        "maxRecords": str(max_records),
+    }
+    if fields:
+        for f in fields:
+            params.setdefault("fields[]", []).append(f)
+    qs = urllib.parse.urlencode(params, doseq=True)
+    url = f"https://api.airtable.com/v0/{AIRTABLE_BASE}/{table_id}?{qs}"
+    req = urllib.request.Request(url, headers={
+        "Authorization": f"Bearer {AIRTABLE_PAT}"
+    })
+    with urllib.request.urlopen(req) as resp:
+        data = json.loads(resp.read().decode())
+    return data.get("records", [])
+
+
 @app.route("/api/artikel-stamm", methods=["GET"])
 @require_auth
 def get_artikel_stamm():
@@ -875,6 +900,112 @@ def get_adressen():
         return jsonify({"error": "Airtable API Token (AIRTABLE_PAT) nicht konfiguriert"}), 500
     try:
         records = _airtable_fetch_all(AIRTABLE_ADRESSEN_TABLE)
+        adressen = []
+        for rec in records:
+            f = rec.get("fields", {})
+            adressen.append({
+                "kunden_nr": f.get("kunden_nr", ""),
+                "name": f.get("name", ""),
+                "anschrift_1": f.get("anschrift_1", ""),
+                "anschrift_2": f.get("anschrift_2", ""),
+                "strasse": f.get("strasse", ""),
+                "plz": f.get("plz", ""),
+                "ort": f.get("ort", ""),
+                "land": f.get("land", ""),
+                "telefon": f.get("telefon", ""),
+                "email": f.get("email", ""),
+                "zahlungsbedingung": f.get("zahlungsbedingung", ""),
+                "versandbedingung": f.get("versandbedingung", ""),
+            })
+        adressen.sort(key=lambda x: x["name"])
+        return jsonify({"adressen": adressen, "total": len(adressen)})
+    except Exception as e:
+        return jsonify({"error": f"Airtable Fehler: {str(e)}"}), 500
+
+
+@app.route("/api/artikel-search", methods=["GET"])
+@require_auth
+def artikel_search():
+    """Search articles in Airtable by query string (min 2 chars).
+
+    Uses FIND() on artikel_nr and bezeichnung for fast server-side search.
+    Returns max 50 results.
+    """
+    if not AIRTABLE_PAT:
+        return jsonify({"error": "Airtable API Token nicht konfiguriert"}), 500
+
+    q = request.args.get("q", "").strip()
+    if len(q) < 2:
+        return jsonify({"artikel": [], "total": 0})
+
+    # Escape single quotes for Airtable formula
+    safe_q = q.replace("'", "\\'").upper()
+    formula = (
+        f"OR("
+        f"FIND('{safe_q}', UPPER({{artikel_nr}})),"
+        f"FIND('{safe_q}', UPPER({{bezeichnung}})),"
+        f"FIND('{safe_q}', UPPER({{Kurzbezeichnung}})),"
+        f"FIND('{safe_q}', UPPER({{zeichnungs_nr}}))"
+        f")"
+    )
+
+    try:
+        records = _airtable_search(
+            AIRTABLE_ARTIKEL_TABLE, formula,
+            fields=["artikel_nr", "bezeichnung", "Kurzbezeichnung",
+                     "gewicht", "bestellnummer", "zeichnungs_nr", "version"],
+            max_records=50
+        )
+        artikel = []
+        for rec in records:
+            f = rec.get("fields", {})
+            artikel.append({
+                "artikel_nr": f.get("artikel_nr", ""),
+                "bezeichnung": f.get("bezeichnung", ""),
+                "kurzbezeichnung": f.get("Kurzbezeichnung", ""),
+                "gewicht": f.get("gewicht", ""),
+                "bestellnummer": f.get("bestellnummer", ""),
+                "zeichnungs_nr": f.get("zeichnungs_nr", ""),
+                "version": f.get("version", ""),
+            })
+        artikel.sort(key=lambda x: x["artikel_nr"])
+        return jsonify({"artikel": artikel, "total": len(artikel)})
+    except Exception as e:
+        return jsonify({"error": f"Airtable Fehler: {str(e)}"}), 500
+
+
+@app.route("/api/adressen-search", methods=["GET"])
+@require_auth
+def adressen_search():
+    """Search addresses in Airtable by query string (min 2 chars).
+
+    Searches across name, kunden_nr, ort fields.
+    Returns max 50 results.
+    """
+    if not AIRTABLE_PAT:
+        return jsonify({"error": "Airtable API Token nicht konfiguriert"}), 500
+
+    q = request.args.get("q", "").strip()
+    if len(q) < 2:
+        return jsonify({"adressen": [], "total": 0})
+
+    safe_q = q.replace("'", "\\'").upper()
+    formula = (
+        f"OR("
+        f"FIND('{safe_q}', UPPER({{name}})),"
+        f"FIND('{safe_q}', UPPER({{kunden_nr}})),"
+        f"FIND('{safe_q}', UPPER({{ort}}))"
+        f")"
+    )
+
+    try:
+        records = _airtable_search(
+            AIRTABLE_ADRESSEN_TABLE, formula,
+            fields=["kunden_nr", "name", "anschrift_1", "anschrift_2",
+                     "strasse", "plz", "ort", "land", "telefon", "email",
+                     "zahlungsbedingung", "versandbedingung"],
+            max_records=50
+        )
         adressen = []
         for rec in records:
             f = rec.get("fields", {})

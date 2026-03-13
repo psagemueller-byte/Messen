@@ -1664,6 +1664,51 @@
         .sd-data-loading {
             padding: 32px; text-align: center; color: #666; font-size: 0.95rem;
         }
+
+        /* Live-Suchfeld-Komponente */
+        .search-box { position: relative; flex: 1; min-width: 220px; }
+        .search-box input {
+            width: 100%; padding: 10px 14px; border: 1.5px solid var(--border);
+            border-radius: 8px; font-size: 1rem; outline: none;
+        }
+        .search-box input:focus { border-color: var(--primary); }
+        .search-box .search-spinner {
+            position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+            font-size: 0.85rem; color: #999; display: none;
+        }
+        .search-box .search-spinner.active { display: block; }
+        .search-results {
+            position: absolute; top: 100%; left: 0; right: 0; z-index: 200;
+            background: white; border: 1.5px solid var(--primary);
+            border-top: none; border-radius: 0 0 8px 8px;
+            max-height: 320px; overflow-y: auto;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+            display: none;
+        }
+        .search-results.open { display: block; }
+        .search-result-item {
+            padding: 10px 14px; cursor: pointer; border-bottom: 1px solid #eee;
+            font-size: 0.9rem; transition: background 0.1s;
+        }
+        .search-result-item:last-child { border-bottom: none; }
+        .search-result-item:hover, .search-result-item.focused { background: #e8f0fe; }
+        .search-result-item .result-title { font-weight: 600; }
+        .search-result-item .result-sub { font-size: 0.8rem; color: #666; margin-top: 2px; }
+        .search-result-empty {
+            padding: 16px; text-align: center; color: #999; font-size: 0.9rem;
+        }
+        .search-selected {
+            display: flex; align-items: center; gap: 8px;
+            background: #e8f5e9; border: 1.5px solid #4caf50; border-radius: 8px;
+            padding: 8px 14px; font-size: 0.95rem;
+        }
+        .search-selected .selected-text { flex: 1; font-weight: 600; }
+        .search-selected .selected-sub { font-size: 0.8rem; color: #555; font-weight: 400; }
+        .search-selected button {
+            background: none; border: none; font-size: 1.2rem; cursor: pointer;
+            color: #999; padding: 0 4px;
+        }
+        .search-selected button:hover { color: #d32f2f; }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -1754,13 +1799,38 @@
 
         <!-- Auftrag-Auswahl für Werker -->
         <div class="auftrag-select-panel" id="auftragSelectPanel">
-            <h2>Fertigungsauftrag wählen</h2>
+            <h2>Bestehenden Auftrag laden</h2>
             <div class="artikel-select-row">
                 <select id="fertAuftragSelect" style="min-width:300px">
                     <option value="">– Auftrag wählen –</option>
                 </select>
                 <button class="primary" onclick="loadSelectedAuftrag()">Auftrag laden</button>
                 <button onclick="showAuftragHistorie()">Auftragshistorie</button>
+            </div>
+        </div>
+
+        <!-- Neuer Fertigungsauftrag erstellen -->
+        <div class="auftrag-select-panel" id="fertNeuAuftragPanel">
+            <h2>Neuen Fertigungsauftrag erstellen</h2>
+            <div class="artikel-select-row" style="flex-wrap:wrap;gap:10px">
+                <div class="search-box" id="fertArtikelSearchBox">
+                    <input type="text" id="fertArtikelSearchInput" placeholder="Artikel suchen (mind. 2 Zeichen) ..." autocomplete="off">
+                    <span class="search-spinner" id="fertArtikelSpinner">Suche...</span>
+                    <div class="search-results" id="fertArtikelResults"></div>
+                </div>
+            </div>
+            <div id="fertArtikelSelected" style="margin-top:8px;display:none"></div>
+            <div class="artikel-select-row" style="margin-top:10px;gap:10px">
+                <div class="search-box" id="fertKundeSearchBox">
+                    <input type="text" id="fertKundeSearchInput" placeholder="Kunde/Lieferant suchen ..." autocomplete="off">
+                    <span class="search-spinner" id="fertKundeSpinner">Suche...</span>
+                    <div class="search-results" id="fertKundeResults"></div>
+                </div>
+            </div>
+            <div id="fertKundeSelected" style="margin-top:8px;display:none"></div>
+            <div class="artikel-select-row" style="margin-top:10px;gap:10px">
+                <input type="text" id="fertAuftragNrInput" placeholder="Fertigungsauftragsnr." style="flex:1;padding:10px 14px;border:1.5px solid #ccc;border-radius:8px;font-size:1rem">
+                <button class="primary" onclick="fertCreateAuftrag()" style="padding:10px 24px;font-size:1rem">Auftrag erstellen</button>
             </div>
         </div>
 
@@ -1887,15 +1957,26 @@
         <div class="we-artikel-panel" id="weAuftragForm">
             <h2>Wareneingang – Neuer Prüfauftrag</h2>
             <div class="artikel-select-row">
-                <select id="weArtikelSelect">
-                    <option value="">– Artikel wählen –</option>
-                </select>
+                <div class="search-box" id="weArtikelSearchBox">
+                    <input type="text" id="weArtikelSearchInput" placeholder="Artikel suchen (mind. 2 Zeichen) ..." autocomplete="off">
+                    <span class="search-spinner" id="weArtikelSpinner">Suche...</span>
+                    <div class="search-results" id="weArtikelResults"></div>
+                </div>
             </div>
+            <div id="weArtikelSelected" style="margin-top:8px;display:none"></div>
+            <!-- Hidden selects for JS compatibility -->
+            <select id="weArtikelSelect" style="display:none"><option value="">–</option></select>
+            <select id="weLieferantSelect" style="display:none"><option value="">–</option></select>
             <div class="artikel-select-row" style="margin-top:8px">
-                <select id="weLieferantSelect">
-                    <option value="">– Lieferant wählen –</option>
-                </select>
-                <input type="text" id="weLieferscheinNr" placeholder="Lieferscheinnummer" style="flex:1;padding:8px 12px;border:1px solid #ccc;border-radius:6px;font-size:1rem;">
+                <div class="search-box" id="weLieferantSearchBox">
+                    <input type="text" id="weLieferantSearchInput" placeholder="Kunde/Lieferant suchen ..." autocomplete="off">
+                    <span class="search-spinner" id="weLieferantSpinner">Suche...</span>
+                    <div class="search-results" id="weLieferantResults"></div>
+                </div>
+            </div>
+            <div id="weLieferantSelected" style="margin-top:8px;display:none"></div>
+            <div class="artikel-select-row" style="margin-top:8px">
+                <input type="text" id="weLieferscheinNr" placeholder="Lieferscheinnummer" style="flex:1;padding:10px 14px;border:1.5px solid #ccc;border-radius:8px;font-size:1rem;">
             </div>
             <div style="margin-top:12px">
                 <button class="primary" onclick="weCreatePruefauftrag()" style="width:100%;padding:12px;font-size:1.05rem">Prüfauftrag erstellen</button>
@@ -1989,7 +2070,7 @@
 
         <!-- Artikeldatenbank -->
         <div class="artikel-panel" id="sdArtikelPanel">
-            <h2>Artikeldatenbank</h2>
+            <h2>Artikeldatenbank <span id="sdArtikelCount" style="font-weight:400;font-size:0.85rem;color:#666"></span></h2>
             <div class="artikel-select-row">
                 <select id="sdArtikelSelect">
                     <option value="">– Artikel wählen –</option>
@@ -1998,8 +2079,8 @@
                 <button onclick="sdToggleArtikelForm('edit')">Bearbeiten</button>
                 <button class="danger" onclick="deleteSelectedArtikel()">Löschen</button>
                 <button id="sdLockBtn" onclick="toggleArtikelLock()">Sperren</button>
-                <input type="text" id="sdAuftragNrInput" placeholder="Fertigungsauftragsnr." style="width:200px;padding:6px 10px;border:1.5px solid #ccc;border-radius:6px;font-size:.95rem;margin-left:auto">
-                <button class="primary" onclick="sdCreateFertigungsauftrag()">Auftrag erstellen</button>
+                <!-- Auftragserstellen entfernt - nur ueber Fertigung/Wareneingang -->
+                <input type="text" id="sdAuftragNrInput" style="display:none">
             </div>
             <div class="artikel-form" id="sdArtikelForm">
                 <div class="form-grid">
@@ -4048,6 +4129,7 @@
             if (mode === "fertigung") {
                 document.querySelector(".header h1").textContent = "QS Fertigung";
                 populateFertAuftragSelect();
+                initFertSearches();
             } else if (mode === "wareneingang") {
                 document.querySelector(".header h1").textContent = "QS Wareneingang";
                 weMode = 'check'; // Werker sieht nur Checkliste
@@ -4056,12 +4138,7 @@
                 document.getElementById("wareneingangMode").appendChild(weWork);
                 document.getElementById("weEditSidebar").style.display = "none";
                 document.getElementById("wePrueferSidebar").style.display = "";
-                wePopulateArtikelSelect();
-                if (lieferantenList.length === 0) {
-                    fetchLieferanten().then(() => wePopulateLieferantSelect());
-                } else {
-                    wePopulateLieferantSelect();
-                }
+                initWeSearches();
             } else if (mode === "stammdaten") {
                 document.querySelector(".header h1").textContent = "Stammdaten";
                 document.getElementById("headerInfo").textContent = "Artikelverwaltung";
@@ -4138,12 +4215,19 @@
         // --- Stammdaten: Artikelverwaltung ---
         function sdPopulateArtikelSelect() {
             const sel = document.getElementById("sdArtikelSelect");
-            sel.innerHTML = '<option value="">– Artikel wählen –</option>';
-            for (const a of artikelList) {
+            sel.innerHTML = '<option value="">– Artikel wählen (nur konfigurierte) –</option>';
+            // In Stammdaten: nur Artikel mit Messplan oder Zeichnung anzeigen
+            const configured = artikelList.filter(a =>
+                a.messplan_file || a.zeichnung_file
+            );
+            for (const a of configured) {
                 const lock = a.gesperrt ? "\u{1F512} " : "";
                 const label = `${lock}${a.artikel_nr} – ${a.bezeichnung}` + (a.version ? ` (V${a.version})` : "");
                 sel.innerHTML += `<option value="${a.id}">${label}</option>`;
             }
+            // Info-Text
+            const countEl = document.getElementById("sdArtikelCount");
+            if (countEl) countEl.textContent = `${configured.length} von ${artikelList.length} Artikeln konfiguriert`;
         }
         document.getElementById("sdArtikelSelect").addEventListener("change", async function() {
             const artId = parseInt(this.value);
@@ -4563,6 +4647,212 @@
             renderAdressen();
         }
 
+        // ===================================================================
+        // LIVE-SUCHE KOMPONENTE (wiederverwendbar)
+        // ===================================================================
+        function initSearchBox(config) {
+            const { inputId, spinnerId, resultsId, selectedId, apiUrl, renderItem, renderSelected, onSelect, onClear } = config;
+            const input = document.getElementById(inputId);
+            const spinner = document.getElementById(spinnerId);
+            const resultsEl = document.getElementById(resultsId);
+            const selectedEl = document.getElementById(selectedId);
+            let debounceTimer = null;
+            let selectedData = null;
+
+            input.addEventListener("input", () => {
+                const q = input.value.trim();
+                if (q.length < 2) {
+                    resultsEl.classList.remove("open");
+                    resultsEl.innerHTML = "";
+                    return;
+                }
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(async () => {
+                    spinner.classList.add("active");
+                    try {
+                        const res = await authFetch(`${apiUrl}?q=${encodeURIComponent(q)}`);
+                        const data = await res.json();
+                        if (data.error) throw new Error(data.error);
+                        const items = data.artikel || data.adressen || [];
+                        if (items.length === 0) {
+                            resultsEl.innerHTML = '<div class="search-result-empty">Keine Ergebnisse</div>';
+                        } else {
+                            resultsEl.innerHTML = items.map((item, i) =>
+                                `<div class="search-result-item" data-idx="${i}">${renderItem(item)}</div>`
+                            ).join("");
+                            resultsEl.querySelectorAll(".search-result-item").forEach((el, i) => {
+                                el.addEventListener("click", () => {
+                                    selectedData = items[i];
+                                    input.style.display = "none";
+                                    resultsEl.classList.remove("open");
+                                    selectedEl.style.display = "";
+                                    selectedEl.innerHTML = renderSelected(items[i]) +
+                                        ' <button onclick="this.parentElement.querySelector(\'.search-clear\').click()">&times;</button>' +
+                                        `<button class="search-clear" style="display:none"></button>`;
+                                    selectedEl.querySelector(".search-clear").addEventListener("click", () => {
+                                        selectedData = null;
+                                        input.style.display = "";
+                                        input.value = "";
+                                        selectedEl.style.display = "none";
+                                        if (onClear) onClear();
+                                    });
+                                    if (onSelect) onSelect(items[i]);
+                                });
+                            });
+                        }
+                        resultsEl.classList.add("open");
+                    } catch(e) {
+                        resultsEl.innerHTML = `<div class="search-result-empty" style="color:#d32f2f">Fehler: ${e.message}</div>`;
+                        resultsEl.classList.add("open");
+                    } finally {
+                        spinner.classList.remove("active");
+                    }
+                }, 350);
+            });
+
+            // Close on outside click
+            document.addEventListener("click", (e) => {
+                if (!e.target.closest(`#${inputId}`) && !e.target.closest(`#${resultsId}`)) {
+                    resultsEl.classList.remove("open");
+                }
+            });
+
+            return {
+                getSelected: () => selectedData,
+                clear: () => {
+                    selectedData = null;
+                    input.style.display = "";
+                    input.value = "";
+                    selectedEl.style.display = "none";
+                    resultsEl.classList.remove("open");
+                    if (onClear) onClear();
+                }
+            };
+        }
+
+        // --- Artikel-Suche Renderer ---
+        function renderArtikelItem(a) {
+            return `<div class="result-title">${a.artikel_nr}</div>` +
+                   `<div class="result-sub">${a.bezeichnung || ''}${a.version ? ' (V'+a.version+')' : ''}</div>`;
+        }
+        function renderArtikelSelected(a) {
+            return `<span class="selected-text">${a.artikel_nr} <span class="selected-sub">– ${a.bezeichnung || ''}${a.version ? ' (V'+a.version+')' : ''}</span></span>`;
+        }
+
+        // --- Kunden/Lieferanten-Suche Renderer ---
+        function renderAdresseItem(a) {
+            return `<div class="result-title">${a.name}${a.kunden_nr ? ' ('+a.kunden_nr+')' : ''}</div>` +
+                   `<div class="result-sub">${[a.strasse, a.plz, a.ort].filter(Boolean).join(', ')}</div>`;
+        }
+        function renderAdresseSelected(a) {
+            return `<span class="selected-text">${a.name} <span class="selected-sub">${a.kunden_nr ? '('+a.kunden_nr+') ' : ''}${a.ort || ''}</span></span>`;
+        }
+
+        // ===================================================================
+        // FERTIGUNG: Neuer Auftrag mit Artikelsuche
+        // ===================================================================
+        let fertArtikelSearch, fertKundeSearch;
+
+        function initFertSearches() {
+            if (fertArtikelSearch) return; // already initialized
+            fertArtikelSearch = initSearchBox({
+                inputId: "fertArtikelSearchInput", spinnerId: "fertArtikelSpinner",
+                resultsId: "fertArtikelResults", selectedId: "fertArtikelSelected",
+                apiUrl: "/api/artikel-search",
+                renderItem: renderArtikelItem, renderSelected: renderArtikelSelected,
+            });
+            fertKundeSearch = initSearchBox({
+                inputId: "fertKundeSearchInput", spinnerId: "fertKundeSpinner",
+                resultsId: "fertKundeResults", selectedId: "fertKundeSelected",
+                apiUrl: "/api/adressen-search",
+                renderItem: renderAdresseItem, renderSelected: renderAdresseSelected,
+            });
+        }
+
+        async function fertCreateAuftrag() {
+            const artikel = fertArtikelSearch?.getSelected();
+            if (!artikel) { alert("Bitte zuerst einen Artikel suchen und auswählen."); return; }
+            const nr = document.getElementById("fertAuftragNrInput").value.trim();
+            if (!nr) { alert("Bitte eine Fertigungsauftragsnr. eingeben."); return; }
+
+            // Check if article exists in Supabase, if not create it
+            let artRow = artikelList.find(a => a.artikel_nr === artikel.artikel_nr &&
+                (!artikel.version || a.version === artikel.version));
+            if (!artRow && sb) {
+                try {
+                    const { data, error } = await sb.from("artikel").insert({
+                        artikel_nr: artikel.artikel_nr,
+                        bezeichnung: artikel.bezeichnung || "",
+                        zeichnungs_nr: artikel.zeichnungs_nr || "",
+                        version: artikel.version || "",
+                    }).select().single();
+                    if (error && error.code === "23505") {
+                        // Already exists, fetch it
+                        const { data: existing } = await sb.from("artikel")
+                            .select("*")
+                            .eq("artikel_nr", artikel.artikel_nr)
+                            .limit(1).single();
+                        artRow = existing;
+                    } else if (error) {
+                        throw error;
+                    } else {
+                        artRow = data;
+                        await fetchArtikelList();
+                    }
+                } catch(e) { alert("Fehler beim Anlegen: " + e.message); return; }
+            }
+            if (!artRow) { alert("Artikel konnte nicht angelegt werden."); return; }
+
+            // Create Fertigungsauftrag
+            try {
+                const kunde = fertKundeSearch?.getSelected();
+                const { data, error } = await sb.from("fertigungsauftrag").insert({
+                    artikel_id: artRow.id,
+                    auftragsnummer: nr,
+                    status: "aktiv"
+                }).select().single();
+                if (error) {
+                    if (error.code === "23505") { alert("Auftragsnummer existiert bereits."); return; }
+                    throw error;
+                }
+                showSaveToast("Auftrag erstellt!");
+                await populateFertAuftragSelect();
+                document.getElementById("fertAuftragSelect").value = data.id;
+                await loadAuftrag(data.id);
+                // Clear search fields
+                fertArtikelSearch.clear();
+                fertKundeSearch.clear();
+                document.getElementById("fertAuftragNrInput").value = "";
+            } catch(e) { alert("Fehler: " + e.message); }
+        }
+
+        // ===================================================================
+        // WARENEINGANG: Artikelsuche + Kundensuche
+        // ===================================================================
+        let weArtikelSearch, weLieferantSearch;
+        let weSelectedArtikelData = null;
+        let weSelectedLieferantData = null;
+
+        function initWeSearches() {
+            if (weArtikelSearch) return;
+            weArtikelSearch = initSearchBox({
+                inputId: "weArtikelSearchInput", spinnerId: "weArtikelSpinner",
+                resultsId: "weArtikelResults", selectedId: "weArtikelSelected",
+                apiUrl: "/api/artikel-search",
+                renderItem: renderArtikelItem, renderSelected: renderArtikelSelected,
+                onSelect: (a) => { weSelectedArtikelData = a; },
+                onClear: () => { weSelectedArtikelData = null; },
+            });
+            weLieferantSearch = initSearchBox({
+                inputId: "weLieferantSearchInput", spinnerId: "weLieferantSpinner",
+                resultsId: "weLieferantResults", selectedId: "weLieferantSelected",
+                apiUrl: "/api/adressen-search",
+                renderItem: renderAdresseItem, renderSelected: renderAdresseSelected,
+                onSelect: (a) => { weSelectedLieferantData = a; },
+                onClear: () => { weSelectedLieferantData = null; },
+            });
+        }
+
         // Set initial state
         document.getElementById("headerInfo").textContent = "Bereich wählen";
 
@@ -4618,15 +4908,47 @@
         }
 
         async function weCreatePruefauftrag() {
-            const sel = document.getElementById("weArtikelSelect");
-            if (!sel.value) { alert("Bitte zuerst einen Artikel wählen."); return; }
-            const art = artikelList.find(a => a.id === parseInt(sel.value));
-            if (!art) return;
+            // Try new search-based selection first, fallback to old dropdowns
+            const searchArtikel = weArtikelSearch?.getSelected();
+            const searchLieferant = weLieferantSearch?.getSelected();
 
-            const lieferant = document.getElementById("weLieferantSelect").value;
+            let art = null;
+            let lieferant = "";
             const lieferscheinNr = document.getElementById("weLieferscheinNr").value.trim();
 
-            if (!lieferant) { alert("Bitte einen Lieferanten wählen."); return; }
+            if (searchArtikel) {
+                // Find or create article in Supabase
+                art = artikelList.find(a => a.artikel_nr === searchArtikel.artikel_nr &&
+                    (!searchArtikel.version || a.version === searchArtikel.version));
+                if (!art && sb) {
+                    try {
+                        const { data, error } = await sb.from("artikel").insert({
+                            artikel_nr: searchArtikel.artikel_nr,
+                            bezeichnung: searchArtikel.bezeichnung || "",
+                            zeichnungs_nr: searchArtikel.zeichnungs_nr || "",
+                            version: searchArtikel.version || "",
+                        }).select().single();
+                        if (error && error.code === "23505") {
+                            const { data: ex } = await sb.from("artikel")
+                                .select("*").eq("artikel_nr", searchArtikel.artikel_nr).limit(1).single();
+                            art = ex;
+                        } else if (error) { throw error; }
+                        else { art = data; await fetchArtikelList(); }
+                    } catch(e) { alert("Fehler: " + e.message); return; }
+                }
+            } else {
+                // Fallback: old dropdown
+                const sel = document.getElementById("weArtikelSelect");
+                if (sel.value) art = artikelList.find(a => a.id === parseInt(sel.value));
+            }
+            if (!art) { alert("Bitte zuerst einen Artikel suchen und auswählen."); return; }
+
+            if (searchLieferant) {
+                lieferant = searchLieferant.name;
+            } else {
+                lieferant = document.getElementById("weLieferantSelect").value;
+            }
+            if (!lieferant) { alert("Bitte einen Kunden/Lieferanten suchen und auswählen."); return; }
 
             // Generate unique Prüfauftrag number
             const paNr = weGeneratePruefauftragNr();
