@@ -1617,6 +1617,53 @@
             background: #e5e7eb;
             color: #333;
         }
+
+        /* Stammdaten: Artikel- & Adressdaten-Tabellen */
+        .sd-data-panel {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .sd-data-panel h3 { margin: 0 0 12px; font-size: 1.1rem; }
+        .sd-data-toolbar {
+            display: flex; gap: 10px; align-items: center;
+            margin-bottom: 14px; flex-wrap: wrap;
+        }
+        .sd-data-toolbar input[type="text"] {
+            flex: 1; min-width: 200px; padding: 8px 14px;
+            border: 1.5px solid var(--border); border-radius: 8px; font-size: 0.95rem;
+        }
+        .sd-data-toolbar input[type="text"]:focus { outline: none; border-color: var(--primary); }
+        .sd-data-count {
+            font-size: 0.85rem; color: #666; margin-left: auto; white-space: nowrap;
+        }
+        .sd-data-table {
+            width: 100%; border-collapse: collapse; font-size: 0.88rem;
+        }
+        .sd-data-table th {
+            background: #f0f4ff; padding: 10px 12px;
+            text-align: left; font-weight: 600; border-bottom: 2px solid var(--border);
+            position: sticky; top: 0; z-index: 1; cursor: pointer; user-select: none;
+            white-space: nowrap;
+        }
+        .sd-data-table th:hover { background: #dce4f8; }
+        .sd-data-table th .sort-arrow { font-size: 0.7rem; margin-left: 4px; opacity: 0.4; }
+        .sd-data-table th.sorted .sort-arrow { opacity: 1; color: var(--primary); }
+        .sd-data-table td {
+            padding: 8px 12px; border-bottom: 1px solid #eee;
+            max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .sd-data-table tr:hover td { background: #f8faff; }
+        .sd-data-table-wrap {
+            max-height: 60vh; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px;
+        }
+        .sd-data-empty {
+            padding: 32px; text-align: center; color: #999; font-size: 0.95rem;
+        }
+        .sd-data-loading {
+            padding: 32px; text-align: center; color: #666; font-size: 0.95rem;
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -1992,12 +2039,14 @@
         </div>
 
         <!-- Stammdaten Tabs: Zeichnung + WE-Prüfpunkte -->
-        <div id="sdTabArea" style="display:none">
+        <div id="sdTabArea">
             <div class="sd-tabs">
                 <div class="sd-tab active" onclick="sdSwitchTab('zeichnung')">Zeichnung sichten</div>
                 <div class="sd-tab" onclick="sdSwitchTab('wepruef')">WE-Prüfpunkte</div>
                 <div class="sd-tab" onclick="sdSwitchTab('presets')">Prüf-Presets</div>
                 <div class="sd-tab" onclick="sdSwitchTab('freigabe')">WE-Freigabe</div>
+                <div class="sd-tab" onclick="sdSwitchTab('artikeldaten')">Artikeldaten</div>
+                <div class="sd-tab" onclick="sdSwitchTab('adressen')">Kunden/Lieferanten</div>
             </div>
             <div class="sd-tab-content active" id="sdTabZeichnung">
                 <button class="primary" onclick="openDrawingReview()" id="sdReviewDrawingBtn">Zeichnung und Messpunkte prüfen</button>
@@ -2102,6 +2151,66 @@
                 <div id="freigabeListItems"></div>
                 <div id="freigabeListEmpty" style="color:#999;font-size:0.9rem;text-align:center;padding:24px">
                     Keine gesperrten Prüfaufträge vorhanden.
+                </div>
+            </div>
+
+            <!-- Artikeldaten Tab (Airtable) -->
+            <div class="sd-tab-content" id="sdTabArtikeldaten">
+                <div class="sd-data-panel">
+                    <h3>Artikel-Stammdaten (ERP)</h3>
+                    <div class="sd-data-toolbar">
+                        <input type="text" id="artikeldatenSearch" placeholder="Suche nach Artikelnr., Bezeichnung, Zeichnungsnr. ..." oninput="filterArtikeldaten()">
+                        <span class="sd-data-count" id="artikeldatenCount"></span>
+                    </div>
+                    <div class="sd-data-table-wrap">
+                        <table class="sd-data-table" id="artikeldatenTable">
+                            <thead>
+                                <tr>
+                                    <th onclick="sortArtikeldaten('artikel_nr')">Artikel-Nr. <span class="sort-arrow">&#9650;</span></th>
+                                    <th onclick="sortArtikeldaten('bezeichnung')">Bezeichnung <span class="sort-arrow">&#9650;</span></th>
+                                    <th onclick="sortArtikeldaten('kurzbezeichnung')">Kurzbezeichnung <span class="sort-arrow">&#9650;</span></th>
+                                    <th onclick="sortArtikeldaten('zeichnungs_nr')">Zeichnungs-Nr. <span class="sort-arrow">&#9650;</span></th>
+                                    <th onclick="sortArtikeldaten('bestellnummer')">Bestellnr. <span class="sort-arrow">&#9650;</span></th>
+                                    <th onclick="sortArtikeldaten('gewicht')">Gewicht <span class="sort-arrow">&#9650;</span></th>
+                                    <th onclick="sortArtikeldaten('version')">Version <span class="sort-arrow">&#9650;</span></th>
+                                </tr>
+                            </thead>
+                            <tbody id="artikeldatenBody"></tbody>
+                        </table>
+                    </div>
+                    <div class="sd-data-loading" id="artikeldatenLoading">Lade Artikeldaten...</div>
+                    <div class="sd-data-empty" id="artikeldatenEmpty" style="display:none">Keine Artikeldaten gefunden.</div>
+                </div>
+            </div>
+
+            <!-- Kunden/Lieferanten Tab (Airtable) -->
+            <div class="sd-tab-content" id="sdTabAdressen">
+                <div class="sd-data-panel">
+                    <h3>Kunden &amp; Lieferanten (ERP)</h3>
+                    <div class="sd-data-toolbar">
+                        <input type="text" id="adressenSearch" placeholder="Suche nach Name, Kundennr., Ort, PLZ ..." oninput="filterAdressen()">
+                        <span class="sd-data-count" id="adressenCount"></span>
+                    </div>
+                    <div class="sd-data-table-wrap">
+                        <table class="sd-data-table" id="adressenTable">
+                            <thead>
+                                <tr>
+                                    <th onclick="sortAdressen('kunden_nr')">Kunden-Nr. <span class="sort-arrow">&#9650;</span></th>
+                                    <th onclick="sortAdressen('name')">Name <span class="sort-arrow">&#9650;</span></th>
+                                    <th onclick="sortAdressen('anschrift_1')">Anschrift <span class="sort-arrow">&#9650;</span></th>
+                                    <th onclick="sortAdressen('strasse')">Straße <span class="sort-arrow">&#9650;</span></th>
+                                    <th onclick="sortAdressen('plz')">PLZ <span class="sort-arrow">&#9650;</span></th>
+                                    <th onclick="sortAdressen('ort')">Ort <span class="sort-arrow">&#9650;</span></th>
+                                    <th onclick="sortAdressen('land')">Land <span class="sort-arrow">&#9650;</span></th>
+                                    <th onclick="sortAdressen('telefon')">Telefon <span class="sort-arrow">&#9650;</span></th>
+                                    <th onclick="sortAdressen('email')">E-Mail <span class="sort-arrow">&#9650;</span></th>
+                                </tr>
+                            </thead>
+                            <tbody id="adressenBody"></tbody>
+                        </table>
+                    </div>
+                    <div class="sd-data-loading" id="adressenLoading">Lade Adressdaten...</div>
+                    <div class="sd-data-empty" id="adressenEmpty" style="display:none">Keine Adressdaten gefunden.</div>
                 </div>
             </div>
         </div>
@@ -4042,7 +4151,10 @@
         document.getElementById("sdArtikelSelect").addEventListener("change", async function() {
             const artId = parseInt(this.value);
             const art = artikelList.find(a => a.id === artId);
-            document.getElementById("sdTabArea").style.display = art ? "" : "none";
+            // Article-dependent tabs: hide content if no article selected
+            const noArt = !art;
+            document.getElementById("sdTabZeichnung").querySelectorAll("button").forEach(b => b.disabled = noArt);
+            document.getElementById("sdTabWEPruef").querySelectorAll("button").forEach(b => b.disabled = noArt);
             document.getElementById("sdLockBtn").textContent = art && art.gesperrt ? "Freigeben" : "Sperren";
             if (art) {
                 // Sync the hidden artikelSelect for compatibility
@@ -4238,19 +4350,23 @@
             } catch(e) { alert("Fehler: " + e.message); }
         }
 
+        const SD_TABS = ["zeichnung", "wepruef", "presets", "freigabe", "artikeldaten", "adressen"];
+        const SD_TAB_IDS = {
+            zeichnung: "sdTabZeichnung",
+            wepruef: "sdTabWEPruef",
+            presets: "sdTabPresets",
+            freigabe: "sdTabFreigabe",
+            artikeldaten: "sdTabArtikeldaten",
+            adressen: "sdTabAdressen",
+        };
+
         function sdSwitchTab(tab) {
             document.querySelectorAll(".sd-tab").forEach((t, i) => {
-                t.classList.toggle("active",
-                    (tab === "zeichnung" && i === 0) ||
-                    (tab === "wepruef" && i === 1) ||
-                    (tab === "presets" && i === 2) ||
-                    (tab === "freigabe" && i === 3)
-                );
+                t.classList.toggle("active", SD_TABS[i] === tab);
             });
-            document.getElementById("sdTabZeichnung").classList.toggle("active", tab === "zeichnung");
-            document.getElementById("sdTabWEPruef").classList.toggle("active", tab === "wepruef");
-            document.getElementById("sdTabPresets").classList.toggle("active", tab === "presets");
-            document.getElementById("sdTabFreigabe").classList.toggle("active", tab === "freigabe");
+            for (const [key, elId] of Object.entries(SD_TAB_IDS)) {
+                document.getElementById(elId).classList.toggle("active", key === tab);
+            }
 
             // Move the shared WE work area into the active tab content
             const weWork = document.getElementById("weWorkArea");
@@ -4272,6 +4388,182 @@
             if (tab === "freigabe") {
                 loadFreigabeListe();
             }
+            if (tab === "artikeldaten") {
+                loadArtikeldaten();
+            }
+            if (tab === "adressen") {
+                loadAdressenDaten();
+            }
+        }
+
+        // ===================================================================
+        // ARTIKELDATEN (Airtable) - Anzeige im Stammdaten-Modus
+        // ===================================================================
+        let artikeldatenCache = null;
+        let artikeldatenSortCol = "artikel_nr";
+        let artikeldatenSortAsc = true;
+
+        async function loadArtikeldaten() {
+            if (artikeldatenCache) { renderArtikeldaten(); return; }
+            document.getElementById("artikeldatenLoading").style.display = "";
+            document.getElementById("artikeldatenEmpty").style.display = "none";
+            document.getElementById("artikeldatenBody").innerHTML = "";
+            try {
+                const res = await authFetch("/api/artikel-stamm");
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+                artikeldatenCache = data.artikel || [];
+                renderArtikeldaten();
+            } catch(e) {
+                document.getElementById("artikeldatenLoading").textContent = "Fehler: " + e.message;
+            }
+        }
+
+        function renderArtikeldaten() {
+            const search = (document.getElementById("artikeldatenSearch").value || "").toLowerCase();
+            let rows = artikeldatenCache || [];
+            if (search) {
+                rows = rows.filter(r =>
+                    (r.artikel_nr || "").toLowerCase().includes(search) ||
+                    (r.bezeichnung || "").toLowerCase().includes(search) ||
+                    (r.kurzbezeichnung || "").toLowerCase().includes(search) ||
+                    (r.zeichnungs_nr || "").toLowerCase().includes(search) ||
+                    (r.bestellnummer || "").toLowerCase().includes(search)
+                );
+            }
+            rows = [...rows].sort((a, b) => {
+                const va = (a[artikeldatenSortCol] || "").toString().toLowerCase();
+                const vb = (b[artikeldatenSortCol] || "").toString().toLowerCase();
+                return artikeldatenSortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+            });
+
+            document.getElementById("artikeldatenLoading").style.display = "none";
+            document.getElementById("artikeldatenEmpty").style.display = rows.length ? "none" : "";
+            document.getElementById("artikeldatenCount").textContent = `${rows.length} von ${(artikeldatenCache||[]).length} Artikel`;
+
+            // Update sort arrows
+            document.querySelectorAll("#artikeldatenTable th").forEach(th => {
+                const col = th.getAttribute("onclick")?.match(/sortArtikeldaten\('(.+?)'\)/)?.[1];
+                const arrow = th.querySelector(".sort-arrow");
+                if (col === artikeldatenSortCol) {
+                    th.classList.add("sorted");
+                    if (arrow) arrow.innerHTML = artikeldatenSortAsc ? "&#9650;" : "&#9660;";
+                } else {
+                    th.classList.remove("sorted");
+                    if (arrow) arrow.innerHTML = "&#9650;";
+                }
+            });
+
+            const tbody = document.getElementById("artikeldatenBody");
+            const esc = t => (t||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+            tbody.innerHTML = rows.map(r => `<tr>
+                <td title="${esc(r.artikel_nr)}">${esc(r.artikel_nr)}</td>
+                <td title="${esc(r.bezeichnung)}">${esc(r.bezeichnung)}</td>
+                <td title="${esc(r.kurzbezeichnung)}">${esc(r.kurzbezeichnung)}</td>
+                <td title="${esc(r.zeichnungs_nr)}">${esc(r.zeichnungs_nr)}</td>
+                <td title="${esc(r.bestellnummer)}">${esc(r.bestellnummer)}</td>
+                <td>${esc(r.gewicht)}</td>
+                <td>${esc(r.version)}</td>
+            </tr>`).join("");
+        }
+
+        function filterArtikeldaten() { renderArtikeldaten(); }
+
+        function sortArtikeldaten(col) {
+            if (artikeldatenSortCol === col) {
+                artikeldatenSortAsc = !artikeldatenSortAsc;
+            } else {
+                artikeldatenSortCol = col;
+                artikeldatenSortAsc = true;
+            }
+            renderArtikeldaten();
+        }
+
+        // ===================================================================
+        // ADRESSEN / KUNDEN / LIEFERANTEN (Airtable)
+        // ===================================================================
+        let adressenCache = null;
+        let adressenSortCol = "name";
+        let adressenSortAsc = true;
+
+        async function loadAdressenDaten() {
+            if (adressenCache) { renderAdressen(); return; }
+            document.getElementById("adressenLoading").style.display = "";
+            document.getElementById("adressenEmpty").style.display = "none";
+            document.getElementById("adressenBody").innerHTML = "";
+            try {
+                const res = await authFetch("/api/adressen");
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+                adressenCache = data.adressen || [];
+                renderAdressen();
+            } catch(e) {
+                document.getElementById("adressenLoading").textContent = "Fehler: " + e.message;
+            }
+        }
+
+        function renderAdressen() {
+            const search = (document.getElementById("adressenSearch").value || "").toLowerCase();
+            let rows = adressenCache || [];
+            if (search) {
+                rows = rows.filter(r =>
+                    (r.kunden_nr || "").toLowerCase().includes(search) ||
+                    (r.name || "").toLowerCase().includes(search) ||
+                    (r.anschrift_1 || "").toLowerCase().includes(search) ||
+                    (r.strasse || "").toLowerCase().includes(search) ||
+                    (r.plz || "").toLowerCase().includes(search) ||
+                    (r.ort || "").toLowerCase().includes(search) ||
+                    (r.email || "").toLowerCase().includes(search)
+                );
+            }
+            rows = [...rows].sort((a, b) => {
+                const va = (a[adressenSortCol] || "").toString().toLowerCase();
+                const vb = (b[adressenSortCol] || "").toString().toLowerCase();
+                return adressenSortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+            });
+
+            document.getElementById("adressenLoading").style.display = "none";
+            document.getElementById("adressenEmpty").style.display = rows.length ? "none" : "";
+            document.getElementById("adressenCount").textContent = `${rows.length} von ${(adressenCache||[]).length} Adressen`;
+
+            // Update sort arrows
+            document.querySelectorAll("#adressenTable th").forEach(th => {
+                const col = th.getAttribute("onclick")?.match(/sortAdressen\('(.+?)'\)/)?.[1];
+                const arrow = th.querySelector(".sort-arrow");
+                if (col === adressenSortCol) {
+                    th.classList.add("sorted");
+                    if (arrow) arrow.innerHTML = adressenSortAsc ? "&#9650;" : "&#9660;";
+                } else {
+                    th.classList.remove("sorted");
+                    if (arrow) arrow.innerHTML = "&#9650;";
+                }
+            });
+
+            const tbody = document.getElementById("adressenBody");
+            const esc = t => (t||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+            tbody.innerHTML = rows.map(r => `<tr>
+                <td>${esc(r.kunden_nr)}</td>
+                <td title="${esc(r.name)}">${esc(r.name)}</td>
+                <td title="${esc(r.anschrift_1)}${r.anschrift_2 ? ', '+esc(r.anschrift_2) : ''}">${esc(r.anschrift_1)}</td>
+                <td title="${esc(r.strasse)}">${esc(r.strasse)}</td>
+                <td>${esc(r.plz)}</td>
+                <td>${esc(r.ort)}</td>
+                <td>${esc(r.land)}</td>
+                <td>${esc(r.telefon)}</td>
+                <td>${r.email ? '<a href="mailto:'+esc(r.email)+'">'+esc(r.email)+'</a>' : ''}</td>
+            </tr>`).join("");
+        }
+
+        function filterAdressen() { renderAdressen(); }
+
+        function sortAdressen(col) {
+            if (adressenSortCol === col) {
+                adressenSortAsc = !adressenSortAsc;
+            } else {
+                adressenSortCol = col;
+                adressenSortAsc = true;
+            }
+            renderAdressen();
         }
 
         // Set initial state
