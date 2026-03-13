@@ -648,7 +648,7 @@ def verify_pin():
     pin = str(data.get("pin", ""))
     if pin == STAMMDATEN_PIN:
         return jsonify({"ok": True})
-    return jsonify({"ok": False, "error": "Falscher PIN"}), 401
+    return jsonify({"ok": False, "error": "Falscher PIN"}), 403
 
 
 # --- Artikel-Import aus CSV ---

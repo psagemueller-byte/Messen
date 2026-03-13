@@ -4090,9 +4090,9 @@
             const errEl = document.getElementById("pinError");
             errEl.textContent = "";
             try {
-                const res = await authFetch("/api/verify-pin", {
+                const res = await fetch("/api/verify-pin", {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: { "Content-Type": "application/json", ...authHeaders() },
                     body: JSON.stringify({ pin })
                 });
                 const data = await res.json();
