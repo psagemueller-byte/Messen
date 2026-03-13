@@ -1700,9 +1700,11 @@
         <div class="login-box">
             <h2>Qualitätssicherung</h2>
             <p>Bitte anmelden</p>
-            <input type="text" id="loginUser" placeholder="Benutzername" autocomplete="username">
-            <input type="password" id="loginPass" placeholder="Passwort" autocomplete="current-password">
-            <button onclick="doLogin()">Anmelden</button>
+            <form id="loginForm" onsubmit="event.preventDefault(); doLogin();">
+                <input type="text" id="loginUser" placeholder="Benutzername" autocomplete="username">
+                <input type="password" id="loginPass" placeholder="Passwort" autocomplete="current-password">
+                <button type="submit">Anmelden</button>
+            </form>
             <div class="login-error" id="loginError"></div>
         </div>
     </div>
@@ -2286,15 +2288,8 @@
             }
         }
 
-        // Enter-Taste im Login
+        // Auto-login if token exists
         document.addEventListener("DOMContentLoaded", () => {
-            document.getElementById("loginPass").addEventListener("keydown", (e) => {
-                if (e.key === "Enter") doLogin();
-            });
-            document.getElementById("loginUser").addEventListener("keydown", (e) => {
-                if (e.key === "Enter") document.getElementById("loginPass").focus();
-            });
-            // Auto-login if token exists
             if (authToken) {
                 fetch("/api/config", { headers: { "X-Auth-Token": authToken } })
                     .then(r => { if (r.ok) { document.getElementById("loginOverlay").classList.add("hidden"); initApp(); } else { sessionStorage.removeItem("authToken"); authToken = ""; } })

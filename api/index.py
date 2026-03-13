@@ -28,9 +28,9 @@ app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB
 
 # --- Authentication ---
-APP_USER = os.environ.get("APP_USER", "admin")
-APP_PASS = os.environ.get("APP_PASS", "QS2026!")
-APP_SECRET = os.environ.get("APP_SECRET", "qs-messen-secret-key-change-me")
+APP_USER = os.environ.get("APP_USER", "admin").strip()
+APP_PASS = os.environ.get("APP_PASS", "QS2026!").strip()
+APP_SECRET = os.environ.get("APP_SECRET", "qs-messen-secret-key-change-me").strip()
 
 def _make_token(username):
     """Create a simple HMAC token."""
@@ -68,7 +68,7 @@ def require_auth(f):
 @app.route("/api/login", methods=["POST"])
 def login():
     data = request.get_json(silent=True) or {}
-    username = data.get("username", "")
+    username = data.get("username", "").strip()
     password = data.get("password", "")
     if username == APP_USER and password == APP_PASS:
         token = _make_token(username)
@@ -638,7 +638,7 @@ def get_lieferanten():
 
 
 # --- PIN verification endpoint ---
-STAMMDATEN_PIN = os.environ.get("STAMMDATEN_PIN", "1234")
+STAMMDATEN_PIN = os.environ.get("STAMMDATEN_PIN", "1234").strip()
 
 
 @app.route("/api/verify-pin", methods=["POST"])
