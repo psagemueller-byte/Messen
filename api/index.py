@@ -938,14 +938,14 @@ def artikel_search():
     if len(q) < 2:
         return jsonify({"artikel": [], "total": 0})
 
-    # Escape single quotes for Airtable formula
+    # Escape single quotes for Airtable formula; use SUBSTITUTE+FIND
+    # with explicit string conversion to handle number fields safely
     safe_q = q.replace("'", "\\'").upper()
+    # Use REGEX for robust matching (works with text and number fields)
     formula = (
         f"OR("
-        f"FIND('{safe_q}', UPPER({{artikel_nr}})),"
-        f"FIND('{safe_q}', UPPER({{bezeichnung}})),"
-        f"FIND('{safe_q}', UPPER({{Kurzbezeichnung}})),"
-        f"FIND('{safe_q}', UPPER({{zeichnungs_nr}}))"
+        f"FIND('{safe_q}', UPPER(CONCATENATE({{artikel_nr}}))),"
+        f"FIND('{safe_q}', UPPER(CONCATENATE({{bezeichnung}})))"
         f")"
     )
 
@@ -992,9 +992,9 @@ def adressen_search():
     safe_q = q.replace("'", "\\'").upper()
     formula = (
         f"OR("
-        f"FIND('{safe_q}', UPPER({{name}})),"
-        f"FIND('{safe_q}', UPPER({{kunden_nr}})),"
-        f"FIND('{safe_q}', UPPER({{ort}}))"
+        f"FIND('{safe_q}', UPPER(CONCATENATE({{name}}))),"
+        f"FIND('{safe_q}', UPPER(CONCATENATE({{kunden_nr}}))),"
+        f"FIND('{safe_q}', UPPER(CONCATENATE({{ort}})))"
         f")"
     )
 

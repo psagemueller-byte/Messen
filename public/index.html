@@ -4535,9 +4535,18 @@
                 }
             });
 
+            // Limit to 200 rows for browser performance
+            const MAX_ROWS = 200;
+            const shown = rows.slice(0, MAX_ROWS);
+
+            if (rows.length > MAX_ROWS) {
+                document.getElementById("artikeldatenCount").textContent =
+                    `Zeige ${MAX_ROWS} von ${rows.length} Treffern (${(artikeldatenCache||[]).length} gesamt) – Suche verfeinern`;
+            }
+
             const tbody = document.getElementById("artikeldatenBody");
             const esc = t => (t||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-            tbody.innerHTML = rows.map(r => `<tr>
+            tbody.innerHTML = shown.map(r => `<tr>
                 <td title="${esc(r.artikel_nr)}">${esc(r.artikel_nr)}</td>
                 <td title="${esc(r.bezeichnung)}">${esc(r.bezeichnung)}</td>
                 <td title="${esc(r.kurzbezeichnung)}">${esc(r.kurzbezeichnung)}</td>
@@ -4620,9 +4629,17 @@
                 }
             });
 
+            // Limit to 200 rows for browser performance
+            const MAX_ROWS = 200;
+            const shown = rows.slice(0, MAX_ROWS);
+            if (rows.length > MAX_ROWS) {
+                document.getElementById("adressenCount").textContent =
+                    `Zeige ${MAX_ROWS} von ${rows.length} Treffern (${(adressenCache||[]).length} gesamt) – Suche verfeinern`;
+            }
+
             const tbody = document.getElementById("adressenBody");
             const esc = t => (t||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-            tbody.innerHTML = rows.map(r => `<tr>
+            tbody.innerHTML = shown.map(r => `<tr>
                 <td>${esc(r.kunden_nr)}</td>
                 <td title="${esc(r.name)}">${esc(r.name)}</td>
                 <td title="${esc(r.anschrift_1)}${r.anschrift_2 ? ', '+esc(r.anschrift_2) : ''}">${esc(r.anschrift_1)}</td>
