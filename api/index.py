@@ -878,13 +878,13 @@ def get_artikel_stamm():
         for rec in records:
             f = rec.get("fields", {})
             artikel.append({
-                "artikel_nr": f.get("artikel_nr", ""),
-                "bezeichnung": f.get("bezeichnung", ""),
-                "kurzbezeichnung": f.get("Kurzbezeichnung", ""),
-                "gewicht": f.get("gewicht", ""),
-                "bestellnummer": f.get("bestellnummer", ""),
-                "zeichnungs_nr": f.get("zeichnungs_nr", ""),
-                "version": f.get("version", ""),
+                "artikel_nr": str(f.get("artikel_nr", "")),
+                "bezeichnung": str(f.get("bezeichnung", "")),
+                "kurzbezeichnung": str(f.get("Kurzbezeichnung", "")),
+                "gewicht": str(f.get("gewicht", "")),
+                "bestellnummer": str(f.get("bestellnummer", "")),
+                "zeichnungs_nr": str(f.get("zeichnungs_nr", "")),
+                "version": str(f.get("version", "")),
             })
         artikel.sort(key=lambda x: x["artikel_nr"])
         return jsonify({"artikel": artikel, "total": len(artikel)})
@@ -904,18 +904,18 @@ def get_adressen():
         for rec in records:
             f = rec.get("fields", {})
             adressen.append({
-                "kunden_nr": f.get("kunden_nr", ""),
-                "name": f.get("name", ""),
-                "anschrift_1": f.get("anschrift_1", ""),
-                "anschrift_2": f.get("anschrift_2", ""),
-                "strasse": f.get("strasse", ""),
-                "plz": f.get("plz", ""),
-                "ort": f.get("ort", ""),
-                "land": f.get("land", ""),
-                "telefon": f.get("telefon", ""),
-                "email": f.get("email", ""),
-                "zahlungsbedingung": f.get("zahlungsbedingung", ""),
-                "versandbedingung": f.get("versandbedingung", ""),
+                "kunden_nr": str(f.get("kunden_nr", "")),
+                "name": str(f.get("name", "")),
+                "anschrift_1": str(f.get("anschrift_1", "")),
+                "anschrift_2": str(f.get("anschrift_2", "")),
+                "strasse": str(f.get("strasse", "")),
+                "plz": str(f.get("plz", "")),
+                "ort": str(f.get("ort", "")),
+                "land": str(f.get("land", "")),
+                "telefon": str(f.get("telefon", "")),
+                "email": str(f.get("email", "")),
+                "zahlungsbedingung": str(f.get("zahlungsbedingung", "")),
+                "versandbedingung": str(f.get("versandbedingung", "")),
             })
         adressen.sort(key=lambda x: x["name"])
         return jsonify({"adressen": adressen, "total": len(adressen)})
@@ -960,13 +960,13 @@ def artikel_search():
         for rec in records:
             f = rec.get("fields", {})
             artikel.append({
-                "artikel_nr": f.get("artikel_nr", ""),
-                "bezeichnung": f.get("bezeichnung", ""),
-                "kurzbezeichnung": f.get("Kurzbezeichnung", ""),
-                "gewicht": f.get("gewicht", ""),
-                "bestellnummer": f.get("bestellnummer", ""),
-                "zeichnungs_nr": f.get("zeichnungs_nr", ""),
-                "version": f.get("version", ""),
+                "artikel_nr": str(f.get("artikel_nr", "")),
+                "bezeichnung": str(f.get("bezeichnung", "")),
+                "kurzbezeichnung": str(f.get("Kurzbezeichnung", "")),
+                "gewicht": str(f.get("gewicht", "")),
+                "bestellnummer": str(f.get("bestellnummer", "")),
+                "zeichnungs_nr": str(f.get("zeichnungs_nr", "")),
+                "version": str(f.get("version", "")),
             })
         artikel.sort(key=lambda x: x["artikel_nr"])
         return jsonify({"artikel": artikel, "total": len(artikel)})
@@ -1010,18 +1010,18 @@ def adressen_search():
         for rec in records:
             f = rec.get("fields", {})
             adressen.append({
-                "kunden_nr": f.get("kunden_nr", ""),
-                "name": f.get("name", ""),
-                "anschrift_1": f.get("anschrift_1", ""),
-                "anschrift_2": f.get("anschrift_2", ""),
-                "strasse": f.get("strasse", ""),
-                "plz": f.get("plz", ""),
-                "ort": f.get("ort", ""),
-                "land": f.get("land", ""),
-                "telefon": f.get("telefon", ""),
-                "email": f.get("email", ""),
-                "zahlungsbedingung": f.get("zahlungsbedingung", ""),
-                "versandbedingung": f.get("versandbedingung", ""),
+                "kunden_nr": str(f.get("kunden_nr", "")),
+                "name": str(f.get("name", "")),
+                "anschrift_1": str(f.get("anschrift_1", "")),
+                "anschrift_2": str(f.get("anschrift_2", "")),
+                "strasse": str(f.get("strasse", "")),
+                "plz": str(f.get("plz", "")),
+                "ort": str(f.get("ort", "")),
+                "land": str(f.get("land", "")),
+                "telefon": str(f.get("telefon", "")),
+                "email": str(f.get("email", "")),
+                "zahlungsbedingung": str(f.get("zahlungsbedingung", "")),
+                "versandbedingung": str(f.get("versandbedingung", "")),
             })
         adressen.sort(key=lambda x: x["name"])
         return jsonify({"adressen": adressen, "total": len(adressen)})

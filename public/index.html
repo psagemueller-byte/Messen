@@ -4545,7 +4545,7 @@
             }
 
             const tbody = document.getElementById("artikeldatenBody");
-            const esc = t => (t||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+            const esc = t => String(t == null ? "" : t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
             tbody.innerHTML = shown.map(r => `<tr>
                 <td title="${esc(r.artikel_nr)}">${esc(r.artikel_nr)}</td>
                 <td title="${esc(r.bezeichnung)}">${esc(r.bezeichnung)}</td>
@@ -4638,7 +4638,7 @@
             }
 
             const tbody = document.getElementById("adressenBody");
-            const esc = t => (t||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+            const esc = t => String(t == null ? "" : t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
             tbody.innerHTML = shown.map(r => `<tr>
                 <td>${esc(r.kunden_nr)}</td>
                 <td title="${esc(r.name)}">${esc(r.name)}</td>
