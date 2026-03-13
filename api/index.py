@@ -845,6 +845,8 @@ def _airtable_fetch_all(table_id, fields=None):
 @require_auth
 def get_artikel_stamm():
     """Fetch article master data from Airtable."""
+    if not AIRTABLE_PAT:
+        return jsonify({"error": "Airtable API Token (AIRTABLE_PAT) nicht konfiguriert"}), 500
     try:
         records = _airtable_fetch_all(AIRTABLE_ARTIKEL_TABLE)
         artikel = []
@@ -869,6 +871,8 @@ def get_artikel_stamm():
 @require_auth
 def get_adressen():
     """Fetch addresses (customers/suppliers) from Airtable."""
+    if not AIRTABLE_PAT:
+        return jsonify({"error": "Airtable API Token (AIRTABLE_PAT) nicht konfiguriert"}), 500
     try:
         records = _airtable_fetch_all(AIRTABLE_ADRESSEN_TABLE)
         adressen = []

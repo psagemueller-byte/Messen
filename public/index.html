@@ -2041,14 +2041,14 @@
         <!-- Stammdaten Tabs: Zeichnung + WE-Prüfpunkte -->
         <div id="sdTabArea">
             <div class="sd-tabs">
-                <div class="sd-tab active" onclick="sdSwitchTab('zeichnung')">Zeichnung sichten</div>
+                <div class="sd-tab" onclick="sdSwitchTab('zeichnung')">Zeichnung sichten</div>
                 <div class="sd-tab" onclick="sdSwitchTab('wepruef')">WE-Prüfpunkte</div>
                 <div class="sd-tab" onclick="sdSwitchTab('presets')">Prüf-Presets</div>
                 <div class="sd-tab" onclick="sdSwitchTab('freigabe')">WE-Freigabe</div>
-                <div class="sd-tab" onclick="sdSwitchTab('artikeldaten')">Artikeldaten</div>
+                <div class="sd-tab active" onclick="sdSwitchTab('artikeldaten')">Artikeldaten</div>
                 <div class="sd-tab" onclick="sdSwitchTab('adressen')">Kunden/Lieferanten</div>
             </div>
-            <div class="sd-tab-content active" id="sdTabZeichnung">
+            <div class="sd-tab-content" id="sdTabZeichnung">
                 <button class="primary" onclick="openDrawingReview()" id="sdReviewDrawingBtn">Zeichnung und Messpunkte prüfen</button>
             </div>
             <div class="sd-tab-content" id="sdTabWEPruef">
@@ -2155,7 +2155,7 @@
             </div>
 
             <!-- Artikeldaten Tab (Airtable) -->
-            <div class="sd-tab-content" id="sdTabArtikeldaten">
+            <div class="sd-tab-content active" id="sdTabArtikeldaten">
                 <div class="sd-data-panel">
                     <h3>Artikel-Stammdaten (ERP)</h3>
                     <div class="sd-data-toolbar">
@@ -4071,6 +4071,8 @@
                 document.querySelector(".header h1").textContent = "Stammdaten";
                 document.getElementById("headerInfo").textContent = "Artikelverwaltung";
                 sdPopulateArtikelSelect();
+                // Default: Artikeldaten-Tab aktiv, Daten laden
+                sdSwitchTab('artikeldaten');
             } else {
                 document.querySelector(".header h1").textContent = "Qualitätssicherung";
                 document.getElementById("headerInfo").textContent = "Bereich wählen";
