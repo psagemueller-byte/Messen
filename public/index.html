@@ -2083,6 +2083,16 @@
                 <input type="text" id="sdAuftragNrInput" style="display:none">
             </div>
             <div class="artikel-form" id="sdArtikelForm">
+                <!-- Airtable article search (shown in "new" mode) -->
+                <div id="sdAfAirtableSearch" style="display:none; margin-bottom:14px;">
+                    <label style="font-weight:600;font-size:0.9rem;margin-bottom:6px;display:block">Artikel aus ERP suchen (min. 2 Zeichen):</label>
+                    <div class="search-box" style="position:relative">
+                        <input type="text" id="sdAfSearchInput" placeholder="Artikelnr. oder Bezeichnung eingeben..." autocomplete="off" style="width:100%;padding:10px 14px;font-size:0.95rem;border:1.5px solid #ccc;border-radius:8px">
+                        <span class="search-spinner" id="sdAfSearchSpinner"></span>
+                        <div class="search-results" id="sdAfSearchResults"></div>
+                    </div>
+                    <div class="search-selected" id="sdAfSearchSelected" style="display:none"></div>
+                </div>
                 <div class="form-grid">
                     <div><label>Artikelnummer *</label><input id="sdAfArtikelNr"></div>
                     <div><label>Bezeichnung</label><input id="sdAfBezeichnung"></div>
@@ -4291,11 +4301,15 @@
         });
 
         let sdFormMode = null; // null | 'new' | 'edit'
+        let sdAfSearchBox = null; // search box instance for new article form
+
         function sdToggleArtikelForm(mode) {
             const form = document.getElementById("sdArtikelForm");
             if (!mode || sdFormMode === mode) {
                 form.classList.remove("visible");
                 sdFormMode = null;
+                document.getElementById("sdAfAirtableSearch").style.display = "none";
+                if (sdAfSearchBox) sdAfSearchBox.clear();
                 return;
             }
             sdFormMode = mode;
@@ -4309,7 +4323,39 @@
                 document.getElementById("sdAfTaktzeit").value = "30";
                 document.getElementById("sdAfMessplanStatus").textContent = "Keine Datei";
                 document.getElementById("sdAfZeichnungStatus").textContent = "Keine Datei";
+                // Show Airtable search and init if needed
+                document.getElementById("sdAfAirtableSearch").style.display = "";
+                if (!sdAfSearchBox) {
+                    sdAfSearchBox = initSearchBox({
+                        inputId: "sdAfSearchInput",
+                        spinnerId: "sdAfSearchSpinner",
+                        resultsId: "sdAfSearchResults",
+                        selectedId: "sdAfSearchSelected",
+                        apiUrl: "/api/artikel-search",
+                        renderItem: item => `<strong>${String(item.artikel_nr)}</strong> – ${String(item.bezeichnung || "")}`,
+                        renderSelected: item => `<strong>${String(item.artikel_nr)}</strong> – ${String(item.bezeichnung || "")}`,
+                        onSelect: (item) => {
+                            // Auto-fill form fields from Airtable data
+                            document.getElementById("sdAfArtikelNr").value = String(item.artikel_nr || "");
+                            document.getElementById("sdAfBezeichnung").value = String(item.bezeichnung || "");
+                            document.getElementById("sdAfIdentNr").value = String(item.bestellnummer || "");
+                            document.getElementById("sdAfZeichnungsNr").value = String(item.zeichnungs_nr || "");
+                            document.getElementById("sdAfVersion").value = String(item.version || "");
+                        },
+                        onClear: () => {
+                            document.getElementById("sdAfArtikelNr").value = "";
+                            document.getElementById("sdAfBezeichnung").value = "";
+                            document.getElementById("sdAfIdentNr").value = "";
+                            document.getElementById("sdAfZeichnungsNr").value = "";
+                            document.getElementById("sdAfVersion").value = "";
+                        }
+                    });
+                } else {
+                    sdAfSearchBox.clear();
+                }
             } else if (mode === "edit") {
+                document.getElementById("sdAfAirtableSearch").style.display = "none";
+                if (sdAfSearchBox) sdAfSearchBox.clear();
                 const sel = document.getElementById("sdArtikelSelect");
                 const art = artikelList.find(a => a.id === parseInt(sel.value));
                 if (!art) { alert("Bitte zuerst einen Artikel wählen."); sdToggleArtikelForm(); return; }
