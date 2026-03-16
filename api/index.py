@@ -363,10 +363,17 @@ def extract_drawing_markers(filepath):
                     has_fullpage_image = True
                     break
 
+    # Run both detection methods and merge results
+    markers_by_pos = {}
     if has_fullpage_image:
-        markers = _extract_markers_raster(doc, page)
-    else:
-        markers = _extract_markers_vector(doc, page, pw, ph)
+        for m in _extract_markers_raster(doc, page):
+            if m["pos_nr"] and m["pos_nr"] != "?" and m["pos_nr"] not in markers_by_pos:
+                markers_by_pos[m["pos_nr"]] = m
+    # Always run vector detection to fill gaps
+    for m in _extract_markers_vector(doc, page, pw, ph):
+        if m["pos_nr"] and m["pos_nr"] != "?" and m["pos_nr"] not in markers_by_pos:
+            markers_by_pos[m["pos_nr"]] = m
+    markers = list(markers_by_pos.values())
 
     # Render page as PNG for frontend display
     mat = fitz.Matrix(150 / 72, 150 / 72)
@@ -408,7 +415,7 @@ def _extract_markers_raster(doc, page):
     raw_markers = []
     for c in contours:
         area = cv2.contourArea(c)
-        if area < 100:
+        if area < 50:
             continue
         x, y, w, h = cv2.boundingRect(c)
         hull = cv2.convexHull(c)
@@ -481,7 +488,7 @@ def _recognize_number(interior_gray, max_num=50):
     best_result = ""
     best_score = -1
 
-    for thresh_val in [140, 160, 180]:
+    for thresh_val in [120, 140, 160, 180, 200]:
         _, binary = cv2.threshold(interior_gray, thresh_val, 255,
                                   cv2.THRESH_BINARY)
         text_coords = np.where(binary < 128)
@@ -497,7 +504,7 @@ def _recognize_number(interior_gray, max_num=50):
 
         for num in range(1, max_num + 1):
             text = str(num)
-            for scale in [0.8, 1.0, 1.2]:
+            for scale in [0.6, 0.8, 1.0, 1.2, 1.5]:
                 (rtw, rth), _ = cv2.getTextSize(text, font, scale, 2)
                 canvas = np.ones((rth + 10, rtw + 10), dtype=np.uint8) * 255
                 cv2.putText(canvas, text, (5, rth + 5), font, scale, 0, 2,
@@ -565,7 +572,7 @@ def _extract_markers_vector(doc, page, pw, ph):
         if not rect:
             continue
         r = fitz.Rect(rect)
-        if r.width < 2 or r.height < 2 or r.width > pw * 0.08:
+        if r.width < 1 or r.height < 1 or r.width > pw * 0.08:
             continue
         items = drawing.get("items", [])
         if not any(it[0] == "c" for it in items):
@@ -579,7 +586,7 @@ def _extract_markers_vector(doc, page, pw, ph):
             if not re.match(r"^\d{1,3}$", clean):
                 continue
             dist = math.sqrt((cx - tb["cx"]) ** 2 + (cy - tb["cy"]) ** 2)
-            if dist < radius * 3.5 and dist < best_dist:
+            if dist < radius * 5.0 and dist < best_dist:
                 best_dist = dist
                 best = clean.lstrip("0") or "0"
         if best and best not in markers:

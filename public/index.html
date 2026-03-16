@@ -4009,6 +4009,47 @@
             saveMarkers();
         }
 
+        async function rerunAutoDetection() {
+            const artId = getCurrentArtikelId();
+            const art = artId ? artikelList.find(a => a.id === artId) : null;
+            if (!art || !art.zeichnung_file) {
+                alert("Keine Zeichnung vorhanden.");
+                return;
+            }
+            const btn = document.getElementById("reviewAutoDetectBtn");
+            btn.disabled = true;
+            btn.textContent = "Erkennung läuft\u2026";
+            try {
+                const { data: blob, error } = await sb.storage.from(BUCKET).download(art.zeichnung_file);
+                if (error) throw error;
+                const fd = new FormData();
+                fd.append("file", blob, art.zeichnung_file.split("/").pop());
+                const res = await authFetch("/api/upload-drawing", { method: "POST", body: fd });
+                const zd = await res.json();
+                if (zd.markers && zd.markers.length > 0) {
+                    let added = 0;
+                    for (const m of zd.markers) {
+                        const key = String(m.pos_nr);
+                        if (!drawingMarkers[key]) {
+                            drawingMarkers[key] = { x: m.x, y: m.y };
+                            added++;
+                        }
+                    }
+                    renderReviewPositions();
+                    renderReviewMarkers();
+                    saveMarkers();
+                    showToast(`${added} neue Messpunkte erkannt (${zd.markers.length} gesamt)`);
+                } else {
+                    showToast("Keine Messpunkte erkannt");
+                }
+            } catch (e) {
+                alert("Fehler bei Auto-Erkennung: " + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "\u21bb Auto-Erkennung";
+            }
+        }
+
         function getUniqueDrawingPositions() {
             // Get all unique drawing-level positions (e.g. "1", "2", "5")
             const positions = allPositions.length > 0 ? allPositions : filteredPositions;
@@ -6472,6 +6513,7 @@
             <div class="review-drawing-toolbar">
                 <span class="review-title">Zeichnung</span>
                 <span class="review-hint" id="reviewHint"></span>
+                <button class="primary" onclick="rerunAutoDetection()" id="reviewAutoDetectBtn" style="margin-left:auto;margin-right:8px;padding:6px 16px;font-size:0.85rem">&#x21bb; Auto-Erkennung</button>
                 <button class="review-close-btn" onclick="closeDrawingReview()">Schließen</button>
             </div>
             <div class="review-drawing-container">
