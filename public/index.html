@@ -2093,6 +2093,7 @@
                     </div>
                     <div class="search-selected" id="sdAfSearchSelected" style="display:none"></div>
                 </div>
+                <div id="sdAfDuplicateWarning" style="display:none;background:#fff3cd;border:1px solid #ffc107;color:#856404;padding:10px 14px;border-radius:8px;margin-bottom:14px;font-size:0.92rem;line-height:1.4"></div>
                 <div class="form-grid">
                     <div><label>Artikelnummer *</label><input id="sdAfArtikelNr"></div>
                     <div><label>Bezeichnung</label><input id="sdAfBezeichnung"></div>
@@ -4309,6 +4310,10 @@
                 form.classList.remove("visible");
                 sdFormMode = null;
                 document.getElementById("sdAfAirtableSearch").style.display = "none";
+                document.getElementById("sdAfDuplicateWarning").style.display = "none";
+                const saveBtn = document.getElementById("sdAfSaveBtn");
+                saveBtn.disabled = false;
+                saveBtn.style.opacity = "";
                 if (sdAfSearchBox) sdAfSearchBox.clear();
                 return;
             }
@@ -4341,6 +4346,21 @@
                             document.getElementById("sdAfIdentNr").value = String(item.bestellnummer || "");
                             document.getElementById("sdAfZeichnungsNr").value = String(item.zeichnungs_nr || "");
                             document.getElementById("sdAfVersion").value = String(item.version || "");
+                            // Check if article already exists in local database
+                            const existing = artikelList.find(a => a.artikel_nr === String(item.artikel_nr || ""));
+                            const warn = document.getElementById("sdAfDuplicateWarning");
+                            const saveBtn = document.getElementById("sdAfSaveBtn");
+                            if (existing) {
+                                const ver = existing.version ? ` (Version: ${existing.version})` : "";
+                                warn.textContent = `Artikel ${existing.artikel_nr}${ver} existiert bereits in der Artikeldatenbank. Bitte den bestehenden Artikel über „Bearbeiten" anpassen.`;
+                                warn.style.display = "";
+                                saveBtn.disabled = true;
+                                saveBtn.style.opacity = "0.5";
+                            } else {
+                                warn.style.display = "none";
+                                saveBtn.disabled = false;
+                                saveBtn.style.opacity = "";
+                            }
                         },
                         onClear: () => {
                             document.getElementById("sdAfArtikelNr").value = "";
@@ -4348,6 +4368,10 @@
                             document.getElementById("sdAfIdentNr").value = "";
                             document.getElementById("sdAfZeichnungsNr").value = "";
                             document.getElementById("sdAfVersion").value = "";
+                            document.getElementById("sdAfDuplicateWarning").style.display = "none";
+                            const saveBtn = document.getElementById("sdAfSaveBtn");
+                            saveBtn.disabled = false;
+                            saveBtn.style.opacity = "";
                         }
                     });
                 } else {
