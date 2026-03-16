@@ -2144,10 +2144,8 @@
         <!-- Stammdaten Tabs: Zeichnung + WE-Prüfpunkte -->
         <div id="sdTabArea">
             <div class="sd-tabs" id="sdMainTabs">
-                <div class="sd-tab active" data-tab="artikeldaten" onclick="sdSwitchTab('artikeldaten')">Artikeldaten</div>
-                <div class="sd-tab" data-tab="fertigung" onclick="sdSwitchTab('zeichnung')">Fertigung</div>
+                <div class="sd-tab active" data-tab="fertigung" onclick="sdSwitchTab('zeichnung')">Fertigung</div>
                 <div class="sd-tab" data-tab="wareneingang" onclick="sdSwitchTabGroup('wepruef')">Wareneingang <span class="sd-tab-arrow">▾</span></div>
-                <div class="sd-tab" data-tab="adressen" onclick="sdSwitchTab('adressen')">Kunden/Lieferanten</div>
             </div>
             <div class="sd-subtabs" id="sdSubtabsWE" style="display:none">
                 <div class="sd-subtab active" data-subtab="wepruef" onclick="sdSwitchSubTab('wepruef')">WE-Prüfpunkte</div>
@@ -2261,65 +2259,6 @@
                 </div>
             </div>
 
-            <!-- Artikeldaten Tab (Airtable) -->
-            <div class="sd-tab-content active" id="sdTabArtikeldaten">
-                <div class="sd-data-panel">
-                    <h3>Artikel-Stammdaten (ERP)</h3>
-                    <div class="sd-data-toolbar">
-                        <input type="text" id="artikeldatenSearch" placeholder="Suche nach Artikelnr., Bezeichnung, Zeichnungsnr. ..." oninput="filterArtikeldaten()">
-                        <span class="sd-data-count" id="artikeldatenCount"></span>
-                    </div>
-                    <div class="sd-data-table-wrap">
-                        <table class="sd-data-table" id="artikeldatenTable">
-                            <thead>
-                                <tr>
-                                    <th onclick="sortArtikeldaten('artikel_nr')">Artikel-Nr. <span class="sort-arrow">&#9650;</span></th>
-                                    <th onclick="sortArtikeldaten('bezeichnung')">Bezeichnung <span class="sort-arrow">&#9650;</span></th>
-                                    <th onclick="sortArtikeldaten('kurzbezeichnung')">Kurzbezeichnung <span class="sort-arrow">&#9650;</span></th>
-                                    <th onclick="sortArtikeldaten('zeichnungs_nr')">Zeichnungs-Nr. <span class="sort-arrow">&#9650;</span></th>
-                                    <th onclick="sortArtikeldaten('bestellnummer')">Bestellnr. <span class="sort-arrow">&#9650;</span></th>
-                                    <th onclick="sortArtikeldaten('gewicht')">Gewicht <span class="sort-arrow">&#9650;</span></th>
-                                    <th onclick="sortArtikeldaten('version')">Version <span class="sort-arrow">&#9650;</span></th>
-                                </tr>
-                            </thead>
-                            <tbody id="artikeldatenBody"></tbody>
-                        </table>
-                    </div>
-                    <div class="sd-data-loading" id="artikeldatenLoading">Lade Artikeldaten...</div>
-                    <div class="sd-data-empty" id="artikeldatenEmpty" style="display:none">Keine Artikeldaten gefunden.</div>
-                </div>
-            </div>
-
-            <!-- Kunden/Lieferanten Tab (Airtable) -->
-            <div class="sd-tab-content" id="sdTabAdressen">
-                <div class="sd-data-panel">
-                    <h3>Kunden &amp; Lieferanten (ERP)</h3>
-                    <div class="sd-data-toolbar">
-                        <input type="text" id="adressenSearch" placeholder="Suche nach Name, Kundennr., Ort, PLZ ..." oninput="filterAdressen()">
-                        <span class="sd-data-count" id="adressenCount"></span>
-                    </div>
-                    <div class="sd-data-table-wrap">
-                        <table class="sd-data-table" id="adressenTable">
-                            <thead>
-                                <tr>
-                                    <th onclick="sortAdressen('kunden_nr')">Kunden-Nr. <span class="sort-arrow">&#9650;</span></th>
-                                    <th onclick="sortAdressen('name')">Name <span class="sort-arrow">&#9650;</span></th>
-                                    <th onclick="sortAdressen('anschrift_1')">Anschrift <span class="sort-arrow">&#9650;</span></th>
-                                    <th onclick="sortAdressen('strasse')">Straße <span class="sort-arrow">&#9650;</span></th>
-                                    <th onclick="sortAdressen('plz')">PLZ <span class="sort-arrow">&#9650;</span></th>
-                                    <th onclick="sortAdressen('ort')">Ort <span class="sort-arrow">&#9650;</span></th>
-                                    <th onclick="sortAdressen('land')">Land <span class="sort-arrow">&#9650;</span></th>
-                                    <th onclick="sortAdressen('telefon')">Telefon <span class="sort-arrow">&#9650;</span></th>
-                                    <th onclick="sortAdressen('email')">E-Mail <span class="sort-arrow">&#9650;</span></th>
-                                </tr>
-                            </thead>
-                            <tbody id="adressenBody"></tbody>
-                        </table>
-                    </div>
-                    <div class="sd-data-loading" id="adressenLoading">Lade Adressdaten...</div>
-                    <div class="sd-data-empty" id="adressenEmpty" style="display:none">Keine Adressdaten gefunden.</div>
-                </div>
-            </div>
         </div>
 
         </div><!-- /stammdatenMode -->
@@ -4231,8 +4170,8 @@
                 document.querySelector(".header h1").textContent = "Stammdaten";
                 document.getElementById("headerInfo").textContent = "Artikelverwaltung";
                 sdPopulateArtikelSelect();
-                // Default: Artikeldaten-Tab aktiv, Daten laden
-                sdSwitchTab('artikeldaten');
+                // Default: Fertigung-Tab aktiv
+                sdSwitchTab('zeichnung');
             } else {
                 document.querySelector(".header h1").textContent = "Qualitätssicherung";
                 document.getElementById("headerInfo").textContent = "Bereich wählen";
@@ -4584,18 +4523,14 @@
             wepruef: "sdTabWEPruef",
             presets: "sdTabPresets",
             freigabe: "sdTabFreigabe",
-            artikeldaten: "sdTabArtikeldaten",
-            adressen: "sdTabAdressen",
         };
 
         // Map content tabs to their main tab group
         const SD_TAB_TO_MAIN = {
-            artikeldaten: "artikeldaten",
             zeichnung: "fertigung",
             wepruef: "wareneingang",
             presets: "wareneingang",
             freigabe: "wareneingang",
-            adressen: "adressen",
         };
 
         const SD_WE_SUBTABS = ["wepruef", "presets", "freigabe"];
@@ -4619,8 +4554,6 @@
             }
             if (tab === "presets") loadPresets();
             if (tab === "freigabe") loadFreigabeListe();
-            if (tab === "artikeldaten") loadArtikeldaten();
-            if (tab === "adressen") loadAdressenDaten();
         }
 
         function sdHighlightMainTab(mainTab) {
