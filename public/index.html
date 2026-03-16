@@ -1390,7 +1390,7 @@
         .pin-dialog .pin-btns button.primary { background: var(--primary); color: white; border-color: var(--primary); }
 
         /* Stammdaten Mode */
-        .sd-tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+        .sd-tabs { display: flex; gap: 4px; margin-bottom: 0; flex-wrap: wrap; }
         .sd-tab {
             padding: 10px 20px; border: 2px solid var(--border);
             border-radius: 8px 8px 0 0; background: #f5f5f5;
@@ -1399,6 +1399,15 @@
         }
         .sd-tab:hover { background: #e8f0fe; }
         .sd-tab.active { background: var(--card); border-color: var(--primary); color: var(--primary); }
+        .sd-tab .sd-tab-arrow { font-size: 0.75rem; margin-left: 2px; }
+        .sd-subtabs { display: flex; gap: 2px; padding: 8px 12px 0; background: var(--card); border: 2px solid var(--primary); border-top: none; border-radius: 0 0 8px 8px; margin-bottom: 16px; }
+        .sd-subtab {
+            padding: 6px 16px; background: #f0f0f0; border-radius: 6px 6px 0 0;
+            cursor: pointer; font-size: 0.82rem; font-weight: 500; border: 1px solid transparent; border-bottom: none;
+        }
+        .sd-subtab:hover { background: #e8f0fe; }
+        .sd-subtab.active { background: #fff; border-color: var(--border); color: var(--primary); font-weight: 600; }
+        .sd-tabs-spacer { margin-bottom: 16px; }
         .sd-tab-content { display: none; }
         .sd-tab-content.active { display: block; }
 
@@ -2134,14 +2143,18 @@
 
         <!-- Stammdaten Tabs: Zeichnung + WE-Prüfpunkte -->
         <div id="sdTabArea">
-            <div class="sd-tabs">
-                <div class="sd-tab" onclick="sdSwitchTab('zeichnung')">Zeichnung sichten</div>
-                <div class="sd-tab" onclick="sdSwitchTab('wepruef')">WE-Prüfpunkte</div>
-                <div class="sd-tab" onclick="sdSwitchTab('presets')">Prüf-Presets</div>
-                <div class="sd-tab" onclick="sdSwitchTab('freigabe')">WE-Freigabe</div>
-                <div class="sd-tab active" onclick="sdSwitchTab('artikeldaten')">Artikeldaten</div>
-                <div class="sd-tab" onclick="sdSwitchTab('adressen')">Kunden/Lieferanten</div>
+            <div class="sd-tabs" id="sdMainTabs">
+                <div class="sd-tab active" data-tab="artikeldaten" onclick="sdSwitchTab('artikeldaten')">Artikeldaten</div>
+                <div class="sd-tab" data-tab="fertigung" onclick="sdSwitchTab('zeichnung')">Fertigung</div>
+                <div class="sd-tab" data-tab="wareneingang" onclick="sdSwitchTabGroup('wepruef')">Wareneingang <span class="sd-tab-arrow">▾</span></div>
+                <div class="sd-tab" data-tab="adressen" onclick="sdSwitchTab('adressen')">Kunden/Lieferanten</div>
             </div>
+            <div class="sd-subtabs" id="sdSubtabsWE" style="display:none">
+                <div class="sd-subtab active" data-subtab="wepruef" onclick="sdSwitchSubTab('wepruef')">WE-Prüfpunkte</div>
+                <div class="sd-subtab" data-subtab="presets" onclick="sdSwitchSubTab('presets')">Prüf-Presets</div>
+                <div class="sd-subtab" data-subtab="freigabe" onclick="sdSwitchSubTab('freigabe')">WE-Freigabe</div>
+            </div>
+            <div class="sd-tabs-spacer" id="sdTabsSpacer"></div>
             <div class="sd-tab-content" id="sdTabZeichnung">
                 <button class="primary" onclick="openDrawingReview()" id="sdReviewDrawingBtn">Zeichnung und Messpunkte prüfen</button>
             </div>
@@ -4502,7 +4515,6 @@
             } catch(e) { alert("Fehler: " + e.message); }
         }
 
-        const SD_TABS = ["zeichnung", "wepruef", "presets", "freigabe", "artikeldaten", "adressen"];
         const SD_TAB_IDS = {
             zeichnung: "sdTabZeichnung",
             wepruef: "sdTabWEPruef",
@@ -4512,14 +4524,23 @@
             adressen: "sdTabAdressen",
         };
 
-        function sdSwitchTab(tab) {
-            document.querySelectorAll(".sd-tab").forEach((t, i) => {
-                t.classList.toggle("active", SD_TABS[i] === tab);
-            });
+        // Map content tabs to their main tab group
+        const SD_TAB_TO_MAIN = {
+            artikeldaten: "artikeldaten",
+            zeichnung: "fertigung",
+            wepruef: "wareneingang",
+            presets: "wareneingang",
+            freigabe: "wareneingang",
+            adressen: "adressen",
+        };
+
+        const SD_WE_SUBTABS = ["wepruef", "presets", "freigabe"];
+
+        function sdActivateContentTab(tab) {
+            // Show/hide content panels
             for (const [key, elId] of Object.entries(SD_TAB_IDS)) {
                 document.getElementById(elId).classList.toggle("active", key === tab);
             }
-
             // Move the shared WE work area into the active tab content
             const weWork = document.getElementById("weWorkArea");
             if (tab === "wepruef") {
@@ -4530,22 +4551,43 @@
                 weWork.style.display = "flex";
                 weRenderAll();
             } else {
-                // Move it back to wareneingangMode
                 document.getElementById("wareneingangMode").appendChild(weWork);
             }
+            if (tab === "presets") loadPresets();
+            if (tab === "freigabe") loadFreigabeListe();
+            if (tab === "artikeldaten") loadArtikeldaten();
+            if (tab === "adressen") loadAdressenDaten();
+        }
 
-            if (tab === "presets") {
-                loadPresets();
-            }
-            if (tab === "freigabe") {
-                loadFreigabeListe();
-            }
-            if (tab === "artikeldaten") {
-                loadArtikeldaten();
-            }
-            if (tab === "adressen") {
-                loadAdressenDaten();
-            }
+        function sdHighlightMainTab(mainTab) {
+            document.querySelectorAll("#sdMainTabs .sd-tab").forEach(t => {
+                t.classList.toggle("active", t.dataset.tab === mainTab);
+            });
+        }
+
+        function sdSwitchTab(tab) {
+            // Direct tab (artikeldaten, zeichnung/fertigung, adressen)
+            const mainTab = SD_TAB_TO_MAIN[tab];
+            sdHighlightMainTab(mainTab);
+            // Hide WE sub-tabs
+            document.getElementById("sdSubtabsWE").style.display = "none";
+            sdActivateContentTab(tab);
+        }
+
+        function sdSwitchTabGroup(defaultSubTab) {
+            sdHighlightMainTab("wareneingang");
+            // Show WE sub-tabs
+            const subtabBar = document.getElementById("sdSubtabsWE");
+            subtabBar.style.display = "flex";
+            // Activate the default (or remembered) sub-tab
+            sdSwitchSubTab(defaultSubTab || "wepruef");
+        }
+
+        function sdSwitchSubTab(tab) {
+            document.querySelectorAll("#sdSubtabsWE .sd-subtab").forEach(t => {
+                t.classList.toggle("active", t.dataset.subtab === tab);
+            });
+            sdActivateContentTab(tab);
         }
 
         // ===================================================================
