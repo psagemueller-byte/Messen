@@ -4476,6 +4476,7 @@
                 await fetchArtikelList();
                 sdPopulateArtikelSelect();
                 document.getElementById("sdArtikelSelect").value = artId;
+                document.getElementById("sdArtikelSelect").dispatchEvent(new Event("change"));
                 sdToggleArtikelForm();
                 document.getElementById("sdAfMessplanInput").value = "";
                 document.getElementById("sdAfZeichnungInput").value = "";
