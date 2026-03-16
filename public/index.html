@@ -3932,35 +3932,58 @@
         let reviewActive = false;
         let reviewSelectedPos = null;
 
-        function openDrawingReview() {
+        async function openDrawingReview() {
+            const artId = getCurrentArtikelId();
+            const art = artId ? artikelList.find(a => a.id === artId) : null;
+
             // Use drawingImg or weDrawingImg as fallback (Stammdaten mode)
             const weImg = document.getElementById("weDrawingImg");
-            const hasFert = drawingImg.src && drawingImg.src !== location.href;
+            let hasFert = drawingImg.src && drawingImg.src !== location.href;
             const hasWE = weImg && weImg.src && weImg.src !== location.href;
-            const imgSrc = hasFert ? drawingImg.src : (hasWE ? weImg.src : null);
+            let imgSrc = hasFert ? drawingImg.src : (hasWE ? weImg.src : null);
+
+            // In Stammdaten mode, load drawing on-demand if not yet loaded
+            if (!imgSrc && currentMode === 'stammdaten' && art && art.zeichnung_file) {
+                try {
+                    const { data: blob, error } = await sb.storage.from(BUCKET).download(art.zeichnung_file);
+                    if (error) throw error;
+                    const fd = new FormData();
+                    fd.append("file", blob, art.zeichnung_file.split("/").pop());
+                    const res = await authFetch("/api/upload-drawing", { method: "POST", body: fd });
+                    const zd = await res.json();
+                    if (zd.image) {
+                        drawingImg.src = zd.image;
+                        imgSrc = zd.image;
+                        hasFert = true;
+                        // Load markers from article
+                        if (art.marker_positionen && Object.keys(art.marker_positionen).length > 0) {
+                            drawingMarkers = art.marker_positionen;
+                        }
+                    }
+                } catch (e) {
+                    alert("Fehler beim Laden der Zeichnung: " + e.message);
+                    return;
+                }
+            }
 
             if (!imgSrc) {
                 alert("Keine Zeichnung vorhanden. Bitte zuerst einen Artikel mit Zeichnung laden.");
                 return;
             }
 
-            // If opening from Stammdaten and positions not loaded yet, load them
-            if (currentMode === 'stammdaten' && allPositions.length === 0) {
-                const artId = getCurrentArtikelId();
-                const art = artikelList.find(a => a.id === artId);
-                if (art && art.messplan_file) {
-                    alert("Messplan wird geladen... Bitte erneut klicken.");
-                    (async () => {
-                        const { data: blob, error } = await sb.storage.from(BUCKET).download(art.messplan_file);
-                        if (!error) {
-                            const fd = new FormData();
-                            fd.append("file", blob, art.messplan_file.split("/").pop());
-                            const res = await authFetch("/api/upload", { method: "POST", body: fd });
-                            const result = await res.json();
-                            if (result.positions) loadData(result, `Artikel ${art.artikel_nr}`);
-                        }
-                    })();
-                    return;
+            // In Stammdaten mode, load messplan positions on-demand if not yet loaded
+            if (currentMode === 'stammdaten' && allPositions.length === 0 && art && art.messplan_file) {
+                try {
+                    const { data: blob, error } = await sb.storage.from(BUCKET).download(art.messplan_file);
+                    if (!error) {
+                        const fd = new FormData();
+                        fd.append("file", blob, art.messplan_file.split("/").pop());
+                        const res = await authFetch("/api/upload", { method: "POST", body: fd });
+                        const result = await res.json();
+                        if (result.positions) loadData(result, `Artikel ${art.artikel_nr}`);
+                    }
+                } catch (e) {
+                    console.warn("Messplan konnte nicht geladen werden:", e);
                 }
             }
 
