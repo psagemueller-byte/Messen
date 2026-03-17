@@ -3977,9 +3977,9 @@
                     renderReviewPositions();
                     renderReviewMarkers();
                     saveMarkers();
-                    showToast(`${added} neue Messpunkte erkannt (${zd.markers.length} gesamt)`);
+                    showSaveToast(`${added} neue Messpunkte erkannt (${zd.markers.length} gesamt)`);
                 } else {
-                    showToast("Keine Messpunkte erkannt");
+                    showSaveToast("Keine Messpunkte erkannt");
                 }
             } catch (e) {
                 alert("Fehler bei Auto-Erkennung: " + e.message);
