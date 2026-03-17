@@ -638,6 +638,16 @@
         }
         .review-pos-item.missing .review-pos-badge { background: #ffe0e0; color: var(--danger); }
         .review-pos-item.placed .review-pos-badge { background: #d4edda; color: var(--success); }
+        .marker-delete-btn {
+            width: 22px; height: 22px;
+            border: none; border-radius: 4px;
+            background: #ffe0e0; color: var(--danger);
+            font-size: 1rem; font-weight: 700;
+            cursor: pointer; display: flex;
+            align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        .marker-delete-btn:hover { background: var(--danger); color: white; }
         .review-drawing-area {
             flex: 1;
             background: white;
@@ -4077,6 +4087,7 @@
                     <div class="review-pos-dot"></div>
                     <span class="review-pos-name"><strong>Pos ${key}</strong> – ${pos.pruefmerkmal || ""}</span>
                     <span class="review-pos-badge">${hasMarker ? "gesetzt" : "fehlt"}</span>
+                    ${hasMarker ? `<button class="marker-delete-btn" onclick="event.stopPropagation();deleteMarker('${key}')" title="Marker entfernen">&times;</button>` : ""}
                     <button class="marker-eye-btn" onclick="event.stopPropagation();toggleMarkerVisibility('${key}');renderReviewPositions()" title="${isHidden ? 'Einblenden' : 'Ausblenden'}">${isHidden ? '\u{1F6AB}' : '\u{1F441}'}</button>
                 </div>`;
             }
@@ -4107,6 +4118,14 @@
             // Show/hide button based on state
             const btn = document.getElementById("reviewDrawingBtn");
             if (btn) btn.style.display = (allPositions.length > 0 && drawingImg.src && drawingImg.src !== location.href) ? "" : "none";
+        }
+
+        function deleteMarker(key) {
+            delete drawingMarkers[key];
+            renderReviewPositions();
+            renderReviewMarkers();
+            saveMarkers();
+            selectReviewPos(key);
         }
 
         function selectReviewPos(key) {
