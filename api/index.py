@@ -353,6 +353,7 @@ def extract_drawing_markers(filepath):
     # Check for embedded raster image that covers the page
     img_list = page.get_images(full=True)
     has_fullpage_image = False
+    img_bbox = None
     if img_list:
         blocks = page.get_text("dict").get("blocks", [])
         for block in blocks:
@@ -361,12 +362,13 @@ def extract_drawing_markers(filepath):
                 coverage = ((bbox[2] - bbox[0]) * (bbox[3] - bbox[1])) / (pw * ph)
                 if coverage > 0.5:
                     has_fullpage_image = True
+                    img_bbox = bbox
                     break
 
     # Run both detection methods and merge results
     markers_by_pos = {}
     if has_fullpage_image:
-        for m in _extract_markers_raster(doc, page):
+        for m in _extract_markers_raster(doc, page, pw, ph, img_bbox):
             if m["pos_nr"] and m["pos_nr"] != "?" and m["pos_nr"] not in markers_by_pos:
                 markers_by_pos[m["pos_nr"]] = m
     # Always run vector detection to fill gaps
@@ -397,12 +399,22 @@ def extract_drawing_markers(filepath):
     }
 
 
-def _extract_markers_raster(doc, page):
-    """Extract markers from embedded raster image using OpenCV + OCR."""
+def _extract_markers_raster(doc, page, pw, ph, img_bbox=None):
+    """Extract markers from embedded raster image using OpenCV + OCR.
+
+    img_bbox: [x0, y0, x1, y1] position of the image on the PDF page.
+    Coordinates are mapped from image pixels to page-relative (0-1) space.
+    """
     xref = page.get_images(full=True)[0][0]
     pix = fitz.Pixmap(doc, xref)
     img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, 3)
     img_h, img_w = img.shape[:2]
+
+    # Image bbox on page (for coordinate mapping)
+    if img_bbox:
+        bx0, by0, bx1, by1 = img_bbox
+    else:
+        bx0, by0, bx1, by1 = 0, 0, pw, ph
 
     # Find red regions in HSV color space (wider range for anti-aliased edges)
     hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
@@ -466,15 +478,19 @@ def _extract_markers_raster(doc, page):
                 })
 
     # Read the number inside each marker's circle head
+    # Map pixel coords to page-relative coords: pixel -> bbox position -> page 0-1
     markers = []
     for m in raw_markers:
         interior_gray = _extract_marker_interior(img, red_mask, m, img_w, img_h)
         pos_nr = _recognize_number(interior_gray)
         cx, cy = m["center"]
+        # Map image pixel to page coordinate
+        page_x = bx0 + (cx / img_w) * (bx1 - bx0)
+        page_y = by0 + (cy / img_h) * (by1 - by0)
         markers.append({
             "pos_nr": pos_nr or "?",
-            "x": cx / img_w,
-            "y": cy / img_h,
+            "x": page_x / pw,
+            "y": page_y / ph,
         })
 
     return markers
