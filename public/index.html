@@ -682,6 +682,7 @@
             position: relative;
             display: inline-block;
             min-width: 100%;
+            transform-origin: 0 0;
         }
         .review-drawing-inner img {
             display: block;
@@ -689,6 +690,32 @@
             height: auto;
             user-select: none;
             -webkit-user-drag: none;
+        }
+        .review-zoom-controls {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-right: 8px;
+        }
+        .review-zoom-controls button {
+            width: 32px;
+            height: 32px;
+            border: 2px solid var(--border);
+            border-radius: 6px;
+            background: white;
+            font-size: 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .review-zoom-controls button:hover { background: #f0f0f0; }
+        .review-zoom-controls span {
+            font-size: 0.8rem;
+            min-width: 40px;
+            text-align: center;
+            color: #666;
         }
         .review-marker {
             position: absolute;
@@ -3870,6 +3897,20 @@
         // --- Drawing Review Overlay ---
         let reviewActive = false;
         let reviewSelectedPos = null;
+        let reviewZoomScale = 1;
+
+        function reviewZoom(direction) {
+            const steps = [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3];
+            const curIdx = steps.indexOf(reviewZoomScale);
+            let newIdx = curIdx >= 0 ? curIdx + direction : 2;
+            newIdx = Math.max(0, Math.min(steps.length - 1, newIdx));
+            reviewZoomScale = steps[newIdx];
+            const inner = document.getElementById("reviewDrawingInner");
+            inner.style.transform = `scale(${reviewZoomScale})`;
+            inner.style.width = reviewZoomScale === 1 ? "" : (100 / reviewZoomScale) + "%";
+            document.getElementById("reviewZoomLevel").textContent =
+                Math.round(reviewZoomScale * 100) + "%";
+        }
 
         async function openDrawingReview() {
             const artId = getCurrentArtikelId();
@@ -3928,6 +3969,12 @@
 
             reviewActive = true;
             reviewSelectedPos = null;
+            // Reset zoom
+            reviewZoomScale = 1;
+            const inner = document.getElementById("reviewDrawingInner");
+            inner.style.transform = "";
+            inner.style.width = "";
+            document.getElementById("reviewZoomLevel").textContent = "100%";
             const overlay = document.getElementById("reviewOverlay");
             overlay.classList.add("active");
             document.getElementById("reviewDrawingImg").src = imgSrc;
@@ -3981,7 +4028,11 @@
                     renderReviewPositions();
                     renderReviewMarkers();
                     saveMarkers();
-                    showSaveToast(`${added} neue Messpunkte erkannt (${zd.markers.length} gesamt)`);
+                    const dbg = zd.debug || {};
+                    const vn = (dbg.vector_found || []).length;
+                    const rn = (dbg.raster_found || []).length;
+                    console.log("Auto-Erkennung Debug:", dbg);
+                    showSaveToast(`${added} neue Messpunkte erkannt (Vektor: ${vn}, Raster: ${rn})`);
                 } else {
                     showSaveToast("Keine Messpunkte erkannt");
                 }
@@ -6450,7 +6501,12 @@
             <div class="review-drawing-toolbar">
                 <span class="review-title">Zeichnung</span>
                 <span class="review-hint" id="reviewHint"></span>
-                <button class="primary" onclick="rerunAutoDetection()" id="reviewAutoDetectBtn" style="margin-left:auto;margin-right:8px;padding:6px 16px;font-size:0.85rem">&#x21bb; Auto-Erkennung</button>
+                <div class="review-zoom-controls" style="margin-left:auto">
+                    <button onclick="reviewZoom(-1)" title="Rauszoomen">&#x2212;</button>
+                    <span id="reviewZoomLevel">100%</span>
+                    <button onclick="reviewZoom(1)" title="Reinzoomen">+</button>
+                </div>
+                <button class="primary" onclick="rerunAutoDetection()" id="reviewAutoDetectBtn" style="margin-right:8px;padding:6px 16px;font-size:0.85rem">&#x21bb; Auto-Erkennung</button>
                 <button class="review-close-btn" onclick="closeDrawingReview()">Schließen</button>
             </div>
             <div class="review-drawing-container">

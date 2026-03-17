@@ -357,24 +357,33 @@ def extract_drawing_markers(filepath, expected_positions=None):
     ph = page.rect.height
 
     markers_by_pos = {}
+    ep_set = set(str(p) for p in expected_positions) if expected_positions else None
+    debug = {"vector_found": [], "raster_found": [], "raster_rejected": []}
 
     # 1. Vector detection FIRST (highest confidence — exact PDF text data)
     for m in _extract_markers_vector(doc, page, pw, ph):
         if m["pos_nr"] and m["pos_nr"] != "?":
             markers_by_pos[m["pos_nr"]] = m
+            debug["vector_found"].append(m["pos_nr"])
 
     # 2. Determine which positions are still missing
     remaining = None
-    if expected_positions:
-        remaining = [str(p) for p in expected_positions
-                     if str(p) not in markers_by_pos]
+    if ep_set:
+        remaining = [p for p in ep_set if p not in markers_by_pos]
 
     # 3. Raster detection on rendered pixmap (fills gaps only)
     for m in _extract_markers_raster(page, pw, ph,
                                      expected_positions=remaining):
-        if m["pos_nr"] and m["pos_nr"] != "?" \
-                and m["pos_nr"] not in markers_by_pos:
-            markers_by_pos[m["pos_nr"]] = m
+        pos = m["pos_nr"]
+        if not pos or pos == "?":
+            continue
+        # Only accept raster results that match expected positions
+        if ep_set and pos not in ep_set:
+            debug["raster_rejected"].append(pos)
+            continue
+        if pos not in markers_by_pos:
+            markers_by_pos[pos] = m
+            debug["raster_found"].append(pos)
 
     markers = list(markers_by_pos.values())
 
@@ -397,6 +406,7 @@ def extract_drawing_markers(filepath, expected_positions=None):
         "page_width": pw,
         "page_height": ph,
         "matched_markers": len(sorted_markers),
+        "debug": debug,
     }
 
 
