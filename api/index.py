@@ -482,6 +482,7 @@ def _extract_markers_raster(page, pw, ph, expected_positions=None):
                 })
 
     # --- Number assignment via PDF text cross-reference ---
+    # Only use RED-colored text (position numbers) — NOT black dimension text
     text_dict = page.get_text("dict")
     all_numbers = []
     for block in text_dict.get("blocks", []):
@@ -489,9 +490,17 @@ def _extract_markers_raster(page, pw, ph, expected_positions=None):
             continue
         for line in block.get("lines", []):
             for span in line.get("spans", []):
-                clean = span.get("text", "").strip()
-                clean = clean.replace(".", "").replace(",", "").strip()
+                raw = span.get("text", "").strip()
+                clean = raw.replace(".", "").replace(",", "").strip()
                 if not re.match(r"^\d{1,3}$", clean):
+                    continue
+                # Check text color — only accept red text
+                color_int = span.get("color", 0)
+                sr = ((color_int >> 16) & 0xFF) / 255.0
+                sg = ((color_int >> 8) & 0xFF) / 255.0
+                sb_c = (color_int & 0xFF) / 255.0
+                is_red = sr > 0.5 and sg < 0.4 and sb_c < 0.4
+                if not is_red:
                     continue
                 bbox = span.get("bbox", [0, 0, 0, 0])
                 tcx = (bbox[0] + bbox[2]) / 2 / pw
@@ -499,14 +508,37 @@ def _extract_markers_raster(page, pw, ph, expected_positions=None):
                 num = clean.lstrip("0") or "0"
                 all_numbers.append({"num": num, "x": tcx, "y": tcy})
 
+    # Also collect ALL text numbers (any color) as secondary source
+    all_text_numbers = []
+    for block in text_dict.get("blocks", []):
+        if block.get("type") != 0:
+            continue
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                raw = span.get("text", "").strip()
+                # Only clean integers — no decimals stripped
+                if not re.match(r"^\d{1,3}$", raw):
+                    continue
+                bbox = span.get("bbox", [0, 0, 0, 0])
+                tcx = (bbox[0] + bbox[2]) / 2 / pw
+                tcy = (bbox[1] + bbox[3]) / 2 / ph
+                num = raw.lstrip("0") or "0"
+                # Only include if it's a plausible position number
+                if expected_positions and num not in [
+                        str(p) for p in expected_positions]:
+                    continue
+                all_text_numbers.append(
+                    {"num": num, "x": tcx, "y": tcy})
+
     markers = []
     used_texts = set()
+    used_secondary = set()
     for m in raw_markers:
         cx, cy = m["center"]
         cx_n = cx / img_w
         cy_n = cy / img_h
 
-        # Try to find matching PDF text number near this circle
+        # 1st: Try to find matching RED text number near this circle
         pos_nr = ""
         best_dist = float("inf")
         best_idx = -1
@@ -522,11 +554,26 @@ def _extract_markers_raster(page, pw, ph, expected_positions=None):
         if best_idx >= 0:
             used_texts.add(best_idx)
         else:
-            # Fallback: constrained template matching
-            interior = _extract_marker_interior(
-                img, red_mask, m, img_w, img_h)
-            pos_nr = _recognize_number(
-                interior, candidates=expected_positions)
+            # 2nd: Try non-red text but ONLY expected position numbers
+            best_dist2 = float("inf")
+            best_idx2 = -1
+            for idx, t in enumerate(all_text_numbers):
+                if idx in used_secondary:
+                    continue
+                dist = math.sqrt(
+                    (cx_n - t["x"])**2 + (cy_n - t["y"])**2)
+                if dist < 0.025 and dist < best_dist2:
+                    best_dist2 = dist
+                    best_idx2 = idx
+                    pos_nr = t["num"]
+            if best_idx2 >= 0:
+                used_secondary.add(best_idx2)
+            else:
+                # 3rd: Fallback — constrained template matching
+                interior = _extract_marker_interior(
+                    img, red_mask, m, img_w, img_h)
+                pos_nr = _recognize_number(
+                    interior, candidates=expected_positions)
 
         markers.append({
             "pos_nr": pos_nr or "?",
@@ -688,9 +735,10 @@ def _extract_markers_vector(doc, page, pw, ph):
                 sr = ((color_int >> 16) & 0xFF) / 255.0
                 sg = ((color_int >> 8) & 0xFF) / 255.0
                 sb = (color_int & 0xFF) / 255.0
-                is_red = sr > 0.6 and sg < 0.35 and sb < 0.35
+                is_red = sr > 0.5 and sg < 0.4 and sb < 0.4
 
-                all_texts.append({"text": text, "cx": tcx, "cy": tcy})
+                all_texts.append({"text": text, "cx": tcx, "cy": tcy,
+                                  "is_red": is_red})
 
                 clean = text.replace(".", "").replace(",", "").strip()
                 if is_red and re.match(r"^\d{1,3}$", clean):
@@ -702,8 +750,8 @@ def _extract_markers_vector(doc, page, pw, ph):
     for drawing in page.get_drawings():
         sc = drawing.get("color") or []
         fc = drawing.get("fill") or []
-        sc_red = len(sc) >= 3 and sc[0] > 0.6 and sc[1] < 0.35 and sc[2] < 0.35
-        fc_red = len(fc) >= 3 and fc[0] > 0.6 and fc[1] < 0.35 and fc[2] < 0.35
+        sc_red = len(sc) >= 3 and sc[0] > 0.5 and sc[1] < 0.4 and sc[2] < 0.4
+        fc_red = len(fc) >= 3 and fc[0] > 0.5 and fc[1] < 0.4 and fc[2] < 0.4
         if not sc_red and not fc_red:
             continue
         rect = drawing.get("rect")
@@ -719,15 +767,26 @@ def _extract_markers_vector(doc, page, pw, ph):
         radius = max(r.width, r.height) / 2
 
         best, best_dist = None, float("inf")
-        for tb in all_texts:
-            clean = tb["text"].replace(".", "").replace(",", "").strip()
-            if not re.match(r"^\d{1,3}$", clean):
-                continue
-            dist = math.sqrt((cx - tb["cx"]) ** 2 + (cy - tb["cy"]) ** 2)
-            max_dist = max(radius * 3.0, 15.0)
-            if dist < max_dist and dist < best_dist:
-                best_dist = dist
-                best = clean.lstrip("0") or "0"
+        # Prefer red-colored text; only use non-red as last resort
+        for prefer_red in [True, False]:
+            if best is not None:
+                break
+            for tb in all_texts:
+                if prefer_red and not tb.get("is_red"):
+                    continue
+                if not prefer_red and tb.get("is_red"):
+                    continue  # already tried
+                clean = tb["text"].replace(".", "").replace(",", "").strip()
+                if not re.match(r"^\d{1,3}$", clean):
+                    continue
+                dist = math.sqrt(
+                    (cx - tb["cx"]) ** 2 + (cy - tb["cy"]) ** 2)
+                max_dist = max(radius * 3.0, 15.0)
+                if not prefer_red:
+                    max_dist = min(max_dist, radius * 1.5)
+                if dist < max_dist and dist < best_dist:
+                    best_dist = dist
+                    best = clean.lstrip("0") or "0"
         if best and best not in markers:
             markers[best] = {"x": cx / pw, "y": cy / ph}
 
