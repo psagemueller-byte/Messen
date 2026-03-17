@@ -404,30 +404,73 @@ def _extract_markers_raster(doc, page):
     img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, 3)
     img_h, img_w = img.shape[:2]
 
-    # Find red regions in HSV color space
+    # Find red regions in HSV color space (wider range for anti-aliased edges)
     hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
-    mask1 = cv2.inRange(hsv, np.array([0, 80, 80]), np.array([10, 255, 255]))
-    mask2 = cv2.inRange(hsv, np.array([170, 80, 80]), np.array([180, 255, 255]))
+    mask1 = cv2.inRange(hsv, np.array([0, 50, 50]), np.array([10, 255, 255]))
+    mask2 = cv2.inRange(hsv, np.array([170, 50, 50]), np.array([180, 255, 255]))
     red_mask = mask1 | mask2
+
+    # Morphological closing to bridge gaps, then opening to remove noise
+    kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+    red_mask = cv2.morphologyEx(red_mask, cv2.MORPH_CLOSE, kernel_close)
+    kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    red_mask = cv2.morphologyEx(red_mask, cv2.MORPH_OPEN, kernel_open)
 
     contours, _ = cv2.findContours(red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
+    # Filter for circular contours (marker circle heads)
     raw_markers = []
     for c in contours:
         area = cv2.contourArea(c)
         if area < 50:
             continue
+        perimeter = cv2.arcLength(c, True)
+        if perimeter == 0:
+            continue
+        circularity = 4 * math.pi * area / (perimeter * perimeter)
         x, y, w, h = cv2.boundingRect(c)
-        hull = cv2.convexHull(c)
-        raw_markers.append({"x": x, "y": y, "w": w, "h": h, "hull": hull})
+        aspect_ratio = min(w, h) / max(w, h)
+
+        if circularity > 0.5 and aspect_ratio > 0.6:
+            (mcx, mcy), mradius = cv2.minEnclosingCircle(c)
+            raw_markers.append({
+                "x": x, "y": y, "w": w, "h": h,
+                "hull": cv2.convexHull(c),
+                "center": (int(mcx), int(mcy)),
+                "radius": int(mradius),
+            })
+
+    # Complementary: HoughCircles to catch circles missed by contour approach
+    min_r = max(8, img_h // 200)
+    max_r = max(20, img_h // 30)
+    circles = cv2.HoughCircles(
+        red_mask, cv2.HOUGH_GRADIENT, dp=1.2,
+        minDist=max(30, img_h // 100),
+        param1=50, param2=30,
+        minRadius=min_r, maxRadius=max_r,
+    )
+    if circles is not None:
+        for (hx, hy, hr) in np.round(circles[0]).astype(int):
+            already_found = any(
+                math.sqrt((hx - m["center"][0])**2 + (hy - m["center"][1])**2)
+                < m["radius"] * 1.5
+                for m in raw_markers
+            )
+            if not already_found:
+                raw_markers.append({
+                    "x": max(0, hx - hr), "y": max(0, hy - hr),
+                    "w": 2 * hr, "h": 2 * hr,
+                    "hull": None,
+                    "center": (hx, hy),
+                    "radius": hr,
+                })
 
     # Read the number inside each marker's circle head
     markers = []
     for m in raw_markers:
         interior_gray = _extract_marker_interior(img, red_mask, m, img_w, img_h)
         pos_nr = _recognize_number(interior_gray)
-        cx = m["x"] + m["w"] // 2
-        cy = m["y"] + m["h"] // 2
+        cx, cy = m["center"]
         markers.append({
             "pos_nr": pos_nr or "?",
             "x": cx / img_w,
@@ -440,10 +483,33 @@ def _extract_markers_raster(doc, page):
 def _extract_marker_interior(img, red_mask, m, img_w, img_h):
     """Extract the white circle-head interior as a grayscale crop.
 
-    Fills the convex hull of the marker, subtracts red pixels, finds the
-    largest remaining blob (the white circle head), and returns only that
-    area with everything else masked to white.
+    When circle center and radius are known, uses a circular mask directly.
+    Falls back to convex hull approach otherwise.
     """
+    # Preferred: circle-based extraction using known center/radius
+    if m.get("center") and m.get("radius"):
+        cx, cy = m["center"]
+        r = m["radius"]
+        inner_r = int(r * 0.75)  # exclude outer red ring
+        if inner_r < 3:
+            return None
+
+        x1, y1 = max(0, cx - inner_r), max(0, cy - inner_r)
+        x2, y2 = min(img_w, cx + inner_r), min(img_h, cy + inner_r)
+        crop = img[y1:y2, x1:x2].copy()
+        ch, cw = crop.shape[:2]
+        if ch < 5 or cw < 5:
+            return None
+
+        circ_mask = np.zeros((ch, cw), dtype=np.uint8)
+        local_cx, local_cy = cx - x1, cy - y1
+        cv2.circle(circ_mask, (local_cx, local_cy), inner_r, 255, -1)
+
+        gray = cv2.cvtColor(crop, cv2.COLOR_RGB2GRAY)
+        gray[circ_mask == 0] = 255
+        return gray
+
+    # Fallback: convex hull approach
     x, y, w, h = m["x"], m["y"], m["w"], m["h"]
     pad = 5
     x1, y1 = max(0, x - pad), max(0, y - pad)
@@ -454,6 +520,8 @@ def _extract_marker_interior(img, red_mask, m, img_w, img_h):
     ch, cw = crop.shape[:2]
 
     hull_mask = np.zeros((ch, cw), dtype=np.uint8)
+    if m.get("hull") is None:
+        return None
     shifted_hull = m["hull"] - np.array([x1, y1])
     cv2.fillConvexPoly(hull_mask, shifted_hull, 255)
 
@@ -474,17 +542,84 @@ def _extract_marker_interior(img, red_mask, m, img_w, img_h):
     return gray[iy:iy + ih, ix:ix + iw]
 
 
-def _recognize_number(interior_gray, max_num=50):
-    """Recognize a position number using OpenCV template matching.
+def _render_digit_templates():
+    """Pre-render digit templates (0-9) at multiple scales."""
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    templates = {}
+    for d in range(10):
+        templates[d] = []
+        text = str(d)
+        for scale in [0.5, 0.7, 0.9, 1.1, 1.4]:
+            (rtw, rth), _ = cv2.getTextSize(text, font, scale, 2)
+            canvas = np.ones((rth + 10, rtw + 10), dtype=np.uint8) * 255
+            cv2.putText(canvas, text, (5, rth + 5), font, scale, 0, 2,
+                        cv2.LINE_AA)
+            rc = np.where(canvas < 128)
+            if len(rc[0]) == 0:
+                continue
+            rendered = canvas[rc[0].min():rc[0].max() + 1,
+                              rc[1].min():rc[1].max() + 1]
+            templates[d].append(rendered)
+    return templates
 
-    Renders each candidate number (1..max_num) with cv2.putText, resizes it
-    to match the text crop dimensions, and picks the best match via
-    normalized cross-correlation.  No external OCR binary needed.
+
+# Pre-render once at module load
+_DIGIT_TEMPLATES = _render_digit_templates()
+
+
+def _match_single_digit(text_crop, th, tw):
+    """Match a single-digit crop against digit templates 1-9."""
+    best_d, best_score = -1, -1
+    for d in range(1, 10):
+        for tmpl in _DIGIT_TEMPLATES[d]:
+            resized = cv2.resize(tmpl, (tw, th), interpolation=cv2.INTER_AREA)
+            score = cv2.matchTemplate(text_crop, resized, cv2.TM_CCOEFF_NORMED)
+            if score.size > 0 and score.max() > best_score:
+                best_score = score.max()
+                best_d = d
+    return str(best_d) if best_d >= 0 else "", best_score
+
+
+def _match_multi_digit(text_crop, th, tw, digit_count):
+    """Match a multi-digit crop by splitting into individual digit columns."""
+    digit_width = tw // digit_count
+    digits = []
+    total_score = 0
+    for i in range(digit_count):
+        x_start = i * digit_width
+        x_end = (i + 1) * digit_width if i < digit_count - 1 else tw
+        digit_crop = text_crop[:, x_start:x_end]
+        dw = digit_crop.shape[1]
+        if dw < 2:
+            return "", -1
+
+        best_d, best_ds = 0, -1
+        for d in range(10):
+            if i == 0 and d == 0:
+                continue  # no leading zero
+            for tmpl in _DIGIT_TEMPLATES[d]:
+                resized = cv2.resize(tmpl, (dw, th), interpolation=cv2.INTER_AREA)
+                score = cv2.matchTemplate(digit_crop, resized,
+                                          cv2.TM_CCOEFF_NORMED)
+                if score.size > 0 and score.max() > best_ds:
+                    best_ds = score.max()
+                    best_d = d
+        digits.append(str(best_d))
+        total_score += best_ds
+
+    avg_score = total_score / digit_count if digit_count > 0 else -1
+    return "".join(digits), avg_score
+
+
+def _recognize_number(interior_gray, max_num=99):
+    """Recognize a position number using digit-by-digit template matching.
+
+    Splits the text region into individual digit columns and matches each
+    digit separately for much better accuracy on multi-digit numbers.
     """
     if interior_gray is None:
         return ""
 
-    font = cv2.FONT_HERSHEY_SIMPLEX
     best_result = ""
     best_score = -1
 
@@ -502,29 +637,27 @@ def _recognize_number(interior_gray, max_num=50):
         if th < 3 or tw < 3:
             continue
 
-        for num in range(1, max_num + 1):
-            text = str(num)
-            for scale in [0.6, 0.8, 1.0, 1.2, 1.5]:
-                (rtw, rth), _ = cv2.getTextSize(text, font, scale, 2)
-                canvas = np.ones((rth + 10, rtw + 10), dtype=np.uint8) * 255
-                cv2.putText(canvas, text, (5, rth + 5), font, scale, 0, 2,
-                            cv2.LINE_AA)
+        # Estimate digit count from aspect ratio (typical digit ~0.55 wide)
+        digit_count = max(1, round(tw / (th * 0.55)))
 
-                rc = np.where(canvas < 128)
-                if len(rc[0]) == 0:
-                    continue
-                rendered = canvas[rc[0].min():rc[0].max() + 1,
-                                  rc[1].min():rc[1].max() + 1]
+        if digit_count == 1:
+            result, score = _match_single_digit(text_crop, th, tw)
+        else:
+            result, score = _match_multi_digit(text_crop, th, tw, digit_count)
 
-                resized = cv2.resize(rendered, (tw, th),
-                                     interpolation=cv2.INTER_AREA)
-                score = cv2.matchTemplate(text_crop, resized,
-                                          cv2.TM_CCOEFF_NORMED)
-                if score.size > 0 and score.max() > best_score:
-                    best_score = score.max()
-                    best_result = text
+        if score > best_score:
+            best_score = score
+            best_result = result
 
-    return best_result if best_score > 0.3 else ""
+    # Validate result is within expected range
+    if best_score > 0.35 and best_result:
+        try:
+            num = int(best_result)
+            if 1 <= num <= max_num:
+                return best_result
+        except ValueError:
+            pass
+    return ""
 
 
 def _extract_markers_vector(doc, page, pw, ph):
@@ -586,7 +719,8 @@ def _extract_markers_vector(doc, page, pw, ph):
             if not re.match(r"^\d{1,3}$", clean):
                 continue
             dist = math.sqrt((cx - tb["cx"]) ** 2 + (cy - tb["cy"]) ** 2)
-            if dist < radius * 5.0 and dist < best_dist:
+            max_dist = max(radius * 3.0, 15.0)
+            if dist < max_dist and dist < best_dist:
                 best_dist = dist
                 best = clean.lstrip("0") or "0"
         if best and best not in markers:
