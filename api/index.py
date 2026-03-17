@@ -324,10 +324,18 @@ def upload_drawing():
     if not file.filename.lower().endswith(".pdf"):
         return jsonify({"error": "Nur PDF-Dateien werden unterstützt"}), 400
 
+    expected_positions = None
+    ep_raw = request.form.get("expected_positions")
+    if ep_raw:
+        try:
+            expected_positions = json.loads(ep_raw)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
         file.save(tmp.name)
         try:
-            result = extract_drawing_markers(tmp.name)
+            result = extract_drawing_markers(tmp.name, expected_positions)
             return jsonify(result)
         except Exception as e:
             return jsonify({"error": f"Fehler: {str(e)}"}), 500
@@ -335,46 +343,39 @@ def upload_drawing():
             os.unlink(tmp.name)
 
 
-def extract_drawing_markers(filepath):
+def extract_drawing_markers(filepath, expected_positions=None):
     """Extract red marker pins from a technical drawing PDF.
 
-    Technical drawings often embed the actual drawing as a raster image with
-    red pin-shaped markers (circle head + pointer tail) overlaid.  This
-    function extracts the embedded image, uses OpenCV to find the red regions,
-    isolates each circle head, and reads the position number via OCR.
-
-    Falls back to PyMuPDF vector/text analysis when no embedded images exist.
+    Uses a two-pass approach:
+    1. Vector detection (highest confidence) — reads PDF text & paths directly
+    2. Raster detection on rendered pixmap (fills gaps) — OpenCV circle detection
+       with PDF text cross-reference and constrained template OCR fallback
     """
     doc = fitz.open(filepath)
     page = doc[0]
     pw = page.rect.width
     ph = page.rect.height
 
-    # Check for embedded raster image that covers the page
-    img_list = page.get_images(full=True)
-    has_fullpage_image = False
-    img_bbox = None
-    if img_list:
-        blocks = page.get_text("dict").get("blocks", [])
-        for block in blocks:
-            if block.get("type") == 1:  # image block
-                bbox = block.get("bbox", [0, 0, 0, 0])
-                coverage = ((bbox[2] - bbox[0]) * (bbox[3] - bbox[1])) / (pw * ph)
-                if coverage > 0.5:
-                    has_fullpage_image = True
-                    img_bbox = bbox
-                    break
-
-    # Run both detection methods and merge results
     markers_by_pos = {}
-    if has_fullpage_image:
-        for m in _extract_markers_raster(doc, page, pw, ph, img_bbox):
-            if m["pos_nr"] and m["pos_nr"] != "?" and m["pos_nr"] not in markers_by_pos:
-                markers_by_pos[m["pos_nr"]] = m
-    # Always run vector detection to fill gaps
+
+    # 1. Vector detection FIRST (highest confidence — exact PDF text data)
     for m in _extract_markers_vector(doc, page, pw, ph):
-        if m["pos_nr"] and m["pos_nr"] != "?" and m["pos_nr"] not in markers_by_pos:
+        if m["pos_nr"] and m["pos_nr"] != "?":
             markers_by_pos[m["pos_nr"]] = m
+
+    # 2. Determine which positions are still missing
+    remaining = None
+    if expected_positions:
+        remaining = [str(p) for p in expected_positions
+                     if str(p) not in markers_by_pos]
+
+    # 3. Raster detection on rendered pixmap (fills gaps only)
+    for m in _extract_markers_raster(page, pw, ph,
+                                     expected_positions=remaining):
+        if m["pos_nr"] and m["pos_nr"] != "?" \
+                and m["pos_nr"] not in markers_by_pos:
+            markers_by_pos[m["pos_nr"]] = m
+
     markers = list(markers_by_pos.values())
 
     # Render page as PNG for frontend display
@@ -399,38 +400,41 @@ def extract_drawing_markers(filepath):
     }
 
 
-def _extract_markers_raster(doc, page, pw, ph, img_bbox=None):
-    """Extract markers from embedded raster image using OpenCV + OCR.
+def _extract_markers_raster(page, pw, ph, expected_positions=None):
+    """Extract markers by rendering the page and detecting red circles.
 
-    img_bbox: [x0, y0, x1, y1] position of the image on the PDF page.
-    Coordinates are mapped from image pixels to page-relative (0-1) space.
+    Renders the page at 300 DPI (same coordinate space as the frontend
+    display image) so that normalized coordinates align perfectly.
+
+    Number assignment strategy:
+    1. Cross-reference detected circles with PDF text data (most reliable)
+    2. Fallback: constrained template matching against expected_positions
     """
-    xref = page.get_images(full=True)[0][0]
-    pix = fitz.Pixmap(doc, xref)
-    img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, 3)
+    # Render the page at 300 DPI for detection
+    det_mat = fitz.Matrix(300 / 72, 300 / 72)
+    pix = page.get_pixmap(matrix=det_mat)
+    img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(
+        pix.height, pix.width, pix.n)
+    # Handle RGBA pixmaps (drop alpha channel)
+    if pix.n == 4:
+        img = img[:, :, :3]
     img_h, img_w = img.shape[:2]
 
-    # Image bbox on page (for coordinate mapping)
-    if img_bbox:
-        bx0, by0, bx1, by1 = img_bbox
-    else:
-        bx0, by0, bx1, by1 = 0, 0, pw, ph
-
-    # Find red regions in HSV color space (wider range for anti-aliased edges)
+    # --- Red circle detection ---
     hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
     mask1 = cv2.inRange(hsv, np.array([0, 50, 50]), np.array([10, 255, 255]))
-    mask2 = cv2.inRange(hsv, np.array([170, 50, 50]), np.array([180, 255, 255]))
+    mask2 = cv2.inRange(hsv, np.array([170, 50, 50]),
+                        np.array([180, 255, 255]))
     red_mask = mask1 | mask2
 
-    # Morphological closing to bridge gaps, then opening to remove noise
     kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
     red_mask = cv2.morphologyEx(red_mask, cv2.MORPH_CLOSE, kernel_close)
     kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
     red_mask = cv2.morphologyEx(red_mask, cv2.MORPH_OPEN, kernel_open)
 
-    contours, _ = cv2.findContours(red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(
+        red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    # Filter for circular contours (marker circle heads)
     raw_markers = []
     for c in contours:
         area = cv2.contourArea(c)
@@ -442,7 +446,6 @@ def _extract_markers_raster(doc, page, pw, ph, img_bbox=None):
         circularity = 4 * math.pi * area / (perimeter * perimeter)
         x, y, w, h = cv2.boundingRect(c)
         aspect_ratio = min(w, h) / max(w, h)
-
         if circularity > 0.5 and aspect_ratio > 0.6:
             (mcx, mcy), mradius = cv2.minEnclosingCircle(c)
             raw_markers.append({
@@ -452,7 +455,7 @@ def _extract_markers_raster(doc, page, pw, ph, img_bbox=None):
                 "radius": int(mradius),
             })
 
-    # Complementary: HoughCircles to catch circles missed by contour approach
+    # Complementary: HoughCircles
     min_r = max(8, img_h // 200)
     max_r = max(20, img_h // 30)
     circles = cv2.HoughCircles(
@@ -464,7 +467,8 @@ def _extract_markers_raster(doc, page, pw, ph, img_bbox=None):
     if circles is not None:
         for (hx, hy, hr) in np.round(circles[0]).astype(int):
             already_found = any(
-                math.sqrt((hx - m["center"][0])**2 + (hy - m["center"][1])**2)
+                math.sqrt((hx - m["center"][0])**2
+                          + (hy - m["center"][1])**2)
                 < m["radius"] * 1.5
                 for m in raw_markers
             )
@@ -477,20 +481,57 @@ def _extract_markers_raster(doc, page, pw, ph, img_bbox=None):
                     "radius": hr,
                 })
 
-    # Read the number inside each marker's circle head
-    # Map pixel coords to page-relative coords: pixel -> bbox position -> page 0-1
+    # --- Number assignment via PDF text cross-reference ---
+    text_dict = page.get_text("dict")
+    all_numbers = []
+    for block in text_dict.get("blocks", []):
+        if block.get("type") != 0:
+            continue
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                clean = span.get("text", "").strip()
+                clean = clean.replace(".", "").replace(",", "").strip()
+                if not re.match(r"^\d{1,3}$", clean):
+                    continue
+                bbox = span.get("bbox", [0, 0, 0, 0])
+                tcx = (bbox[0] + bbox[2]) / 2 / pw
+                tcy = (bbox[1] + bbox[3]) / 2 / ph
+                num = clean.lstrip("0") or "0"
+                all_numbers.append({"num": num, "x": tcx, "y": tcy})
+
     markers = []
+    used_texts = set()
     for m in raw_markers:
-        interior_gray = _extract_marker_interior(img, red_mask, m, img_w, img_h)
-        pos_nr = _recognize_number(interior_gray)
         cx, cy = m["center"]
-        # Map image pixel to page coordinate
-        page_x = bx0 + (cx / img_w) * (bx1 - bx0)
-        page_y = by0 + (cy / img_h) * (by1 - by0)
+        cx_n = cx / img_w
+        cy_n = cy / img_h
+
+        # Try to find matching PDF text number near this circle
+        pos_nr = ""
+        best_dist = float("inf")
+        best_idx = -1
+        for idx, t in enumerate(all_numbers):
+            if idx in used_texts:
+                continue
+            dist = math.sqrt((cx_n - t["x"])**2 + (cy_n - t["y"])**2)
+            if dist < 0.04 and dist < best_dist:
+                best_dist = dist
+                best_idx = idx
+                pos_nr = t["num"]
+
+        if best_idx >= 0:
+            used_texts.add(best_idx)
+        else:
+            # Fallback: constrained template matching
+            interior = _extract_marker_interior(
+                img, red_mask, m, img_w, img_h)
+            pos_nr = _recognize_number(
+                interior, candidates=expected_positions)
+
         markers.append({
             "pos_nr": pos_nr or "?",
-            "x": page_x / pw,
-            "y": page_y / ph,
+            "x": cx_n,
+            "y": cy_n,
         })
 
     return markers
@@ -558,86 +599,32 @@ def _extract_marker_interior(img, red_mask, m, img_w, img_h):
     return gray[iy:iy + ih, ix:ix + iw]
 
 
-def _render_digit_templates():
-    """Pre-render digit templates (0-9) at multiple scales."""
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    templates = {}
-    for d in range(10):
-        templates[d] = []
-        text = str(d)
-        for scale in [0.5, 0.7, 0.9, 1.1, 1.4]:
-            (rtw, rth), _ = cv2.getTextSize(text, font, scale, 2)
-            canvas = np.ones((rth + 10, rtw + 10), dtype=np.uint8) * 255
-            cv2.putText(canvas, text, (5, rth + 5), font, scale, 0, 2,
-                        cv2.LINE_AA)
-            rc = np.where(canvas < 128)
-            if len(rc[0]) == 0:
-                continue
-            rendered = canvas[rc[0].min():rc[0].max() + 1,
-                              rc[1].min():rc[1].max() + 1]
-            templates[d].append(rendered)
-    return templates
+def _recognize_number(interior_gray, candidates=None, max_num=99):
+    """Recognize a position number using template matching.
 
-
-# Pre-render once at module load
-_DIGIT_TEMPLATES = _render_digit_templates()
-
-
-def _match_single_digit(text_crop, th, tw):
-    """Match a single-digit crop against digit templates 1-9."""
-    best_d, best_score = -1, -1
-    for d in range(1, 10):
-        for tmpl in _DIGIT_TEMPLATES[d]:
-            resized = cv2.resize(tmpl, (tw, th), interpolation=cv2.INTER_AREA)
-            score = cv2.matchTemplate(text_crop, resized, cv2.TM_CCOEFF_NORMED)
-            if score.size > 0 and score.max() > best_score:
-                best_score = score.max()
-                best_d = d
-    return str(best_d) if best_d >= 0 else "", best_score
-
-
-def _match_multi_digit(text_crop, th, tw, digit_count):
-    """Match a multi-digit crop by splitting into individual digit columns."""
-    digit_width = tw // digit_count
-    digits = []
-    total_score = 0
-    for i in range(digit_count):
-        x_start = i * digit_width
-        x_end = (i + 1) * digit_width if i < digit_count - 1 else tw
-        digit_crop = text_crop[:, x_start:x_end]
-        dw = digit_crop.shape[1]
-        if dw < 2:
-            return "", -1
-
-        best_d, best_ds = 0, -1
-        for d in range(10):
-            if i == 0 and d == 0:
-                continue  # no leading zero
-            for tmpl in _DIGIT_TEMPLATES[d]:
-                resized = cv2.resize(tmpl, (dw, th), interpolation=cv2.INTER_AREA)
-                score = cv2.matchTemplate(digit_crop, resized,
-                                          cv2.TM_CCOEFF_NORMED)
-                if score.size > 0 and score.max() > best_ds:
-                    best_ds = score.max()
-                    best_d = d
-        digits.append(str(best_d))
-        total_score += best_ds
-
-    avg_score = total_score / digit_count if digit_count > 0 else -1
-    return "".join(digits), avg_score
-
-
-def _recognize_number(interior_gray, max_num=99):
-    """Recognize a position number using digit-by-digit template matching.
-
-    Splits the text region into individual digit columns and matches each
-    digit separately for much better accuracy on multi-digit numbers.
+    When candidates is provided, matches only against those specific numbers
+    as whole-number templates (much more accurate than digit-by-digit).
+    Falls back to digit-by-digit matching when no candidates given.
     """
     if interior_gray is None:
         return ""
 
+    font = cv2.FONT_HERSHEY_SIMPLEX
     best_result = ""
     best_score = -1
+
+    # Determine which numbers to try
+    if candidates:
+        nums_to_try = []
+        for c in candidates:
+            c_str = str(c).strip()
+            if c_str.isdigit():
+                nums_to_try.append(int(c_str))
+    else:
+        nums_to_try = list(range(1, max_num + 1))
+
+    if not nums_to_try:
+        return ""
 
     for thresh_val in [120, 140, 160, 180, 200]:
         _, binary = cv2.threshold(interior_gray, thresh_val, 255,
@@ -653,27 +640,29 @@ def _recognize_number(interior_gray, max_num=99):
         if th < 3 or tw < 3:
             continue
 
-        # Estimate digit count from aspect ratio (typical digit ~0.55 wide)
-        digit_count = max(1, round(tw / (th * 0.55)))
+        # Match whole numbers as templates (not digit-by-digit)
+        for num in nums_to_try:
+            text = str(num)
+            for scale in [0.5, 0.7, 0.9, 1.1, 1.4]:
+                (rtw, rth), _ = cv2.getTextSize(text, font, scale, 2)
+                canvas = np.ones((rth + 10, rtw + 10),
+                                 dtype=np.uint8) * 255
+                cv2.putText(canvas, text, (5, rth + 5), font, scale,
+                            0, 2, cv2.LINE_AA)
+                rc = np.where(canvas < 128)
+                if len(rc[0]) == 0:
+                    continue
+                rendered = canvas[rc[0].min():rc[0].max() + 1,
+                                  rc[1].min():rc[1].max() + 1]
+                resized = cv2.resize(rendered, (tw, th),
+                                     interpolation=cv2.INTER_AREA)
+                score = cv2.matchTemplate(
+                    text_crop, resized, cv2.TM_CCOEFF_NORMED)
+                if score.size > 0 and score.max() > best_score:
+                    best_score = score.max()
+                    best_result = text
 
-        if digit_count == 1:
-            result, score = _match_single_digit(text_crop, th, tw)
-        else:
-            result, score = _match_multi_digit(text_crop, th, tw, digit_count)
-
-        if score > best_score:
-            best_score = score
-            best_result = result
-
-    # Validate result is within expected range
-    if best_score > 0.35 and best_result:
-        try:
-            num = int(best_result)
-            if 1 <= num <= max_num:
-                return best_result
-        except ValueError:
-            pass
-    return ""
+    return best_result if best_score > 0.35 else ""
 
 
 def _extract_markers_vector(doc, page, pw, ph):

@@ -3963,6 +3963,10 @@
                 if (error) throw error;
                 const fd = new FormData();
                 fd.append("file", blob, art.zeichnung_file.split("/").pop());
+                // Send expected position numbers so backend can constrain OCR
+                const entries = getUniqueDrawingPositions();
+                const expectedPositions = entries.map(([key]) => key);
+                fd.append("expected_positions", JSON.stringify(expectedPositions));
                 const res = await authFetch("/api/upload-drawing", { method: "POST", body: fd });
                 const zd = await res.json();
                 if (zd.markers && zd.markers.length > 0) {
