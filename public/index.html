@@ -682,7 +682,6 @@
             position: relative;
             display: inline-block;
             min-width: 100%;
-            transform-origin: 0 0;
         }
         .review-drawing-inner img {
             display: block;
@@ -3906,8 +3905,10 @@
             newIdx = Math.max(0, Math.min(steps.length - 1, newIdx));
             reviewZoomScale = steps[newIdx];
             const inner = document.getElementById("reviewDrawingInner");
-            inner.style.transform = `scale(${reviewZoomScale})`;
-            inner.style.width = reviewZoomScale === 1 ? "" : (100 / reviewZoomScale) + "%";
+            // Change the actual width so the drawing gets larger/smaller
+            // Markers are %-positioned so they scale with the drawing
+            inner.style.width = (reviewZoomScale * 100) + "%";
+            inner.style.minWidth = (reviewZoomScale * 100) + "%";
             document.getElementById("reviewZoomLevel").textContent =
                 Math.round(reviewZoomScale * 100) + "%";
         }
@@ -3972,8 +3973,8 @@
             // Reset zoom
             reviewZoomScale = 1;
             const inner = document.getElementById("reviewDrawingInner");
-            inner.style.transform = "";
-            inner.style.width = "";
+            inner.style.width = "100%";
+            inner.style.minWidth = "100%";
             document.getElementById("reviewZoomLevel").textContent = "100%";
             const overlay = document.getElementById("reviewOverlay");
             overlay.classList.add("active");
