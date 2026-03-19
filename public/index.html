@@ -2668,7 +2668,9 @@
                                     drawingMarkers[m.pos_nr] = { x: m.x, y: m.y };
                                 }
                                 renderMarkers();
-                                saveMarkers();
+                                // Only save auto-detected markers in Stammdaten mode
+                                // (don't overwrite manually placed Stammdaten markers from Fertigung)
+                                if (currentMode === 'stammdaten') saveMarkers();
                                 document.getElementById("drawingStatus").textContent =
                                     `${zd.matched_markers} Messpunkte erkannt`;
                             } else {
@@ -3316,6 +3318,9 @@
                 partCount = maxTeil;
                 document.getElementById("partCount").textContent = String(partCount);
 
+                // Re-render measurements and markers with correct partCount
+                updateMeasurements();
+
                 showAuftragPanel();
             } catch(e) { alert("Fehler beim Laden: " + e.message); }
         }
@@ -3895,6 +3900,9 @@
                 if (sb && artId) {
                     try {
                         await sb.from("artikel").update({ marker_positionen: drawingMarkers }).eq("id", artId);
+                        // Also update artikelList cache so Fertigung mode gets fresh data
+                        const cached = artikelList.find(a => a.id === artId);
+                        if (cached) cached.marker_positionen = JSON.parse(JSON.stringify(drawingMarkers));
                     } catch(e) { console.error("Marker-Speicherung fehlgeschlagen:", e); }
                 }
             }, 500);
