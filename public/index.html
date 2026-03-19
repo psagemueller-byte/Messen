@@ -4120,6 +4120,14 @@
             if (btn) btn.style.display = (allPositions.length > 0 && drawingImg.src && drawingImg.src !== location.href) ? "" : "none";
         }
 
+        function deleteAllMarkers() {
+            if (!confirm("Alle Markierungen entfernen?")) return;
+            drawingMarkers = {};
+            renderReviewPositions();
+            renderReviewMarkers();
+            saveMarkers();
+        }
+
         function deleteMarker(key) {
             delete drawingMarkers[key];
             renderReviewPositions();
@@ -6527,7 +6535,8 @@
                     <button onclick="reviewZoom(1)" title="Reinzoomen">+</button>
                 </div>
                 <button class="primary" onclick="rerunAutoDetection()" id="reviewAutoDetectBtn" style="margin-right:8px;padding:6px 16px;font-size:0.85rem">&#x21bb; Auto-Erkennung</button>
-                <button class="review-close-btn" onclick="closeDrawingReview()">Schließen</button>
+                <button class="review-close-btn" onclick="deleteAllMarkers()" style="margin-right:4px;color:var(--danger);border-color:var(--danger)">Alle entfernen</button>
+                <button class="review-close-btn" onclick="closeDrawingReview()">Schlie&szlig;en</button>
             </div>
             <div class="review-drawing-container">
                 <div class="review-drawing-inner" id="reviewDrawingInner">
