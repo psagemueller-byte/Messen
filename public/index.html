@@ -1966,12 +1966,19 @@
                 <h3>Messpunktzeichnung</h3>
                 <div class="drawing-toolbar" id="drawingToolbar" style="display:none">
                     <span id="drawingStatus" style="font-size:0.85rem;color:#666"></span>
-                    <select id="calibPosSelect"></select>
-                    <button class="calib-btn" id="calibBtn" onclick="toggleCalibration()">Manuell korrigieren</button>
-                    <button class="calib-btn" onclick="redetectMarkers()" style="border-color:#0066cc;color:#0066cc" title="Punkte löschen und neu erkennen">&#x21bb; Neu erkennen</button>
-                    <button class="calib-btn" onclick="replaceDrawing()" style="border-color:#666;color:#666" title="Andere Zeichnung laden">&#x1f4c4; Zeichnung tauschen</button>
-                    <button class="calib-btn" onclick="clearAllMarkers()" style="border-color:#dc3545;color:#dc3545">Alle löschen</button>
-                    <button class="calib-btn" id="toggleMarkersBtn" onclick="toggleAllMarkersVisibility()" style="border-color:#555;color:#555">Marker ausblenden</button>
+                    <span id="drawingEditTools">
+                        <select id="calibPosSelect"></select>
+                        <button class="calib-btn" id="calibBtn" onclick="toggleCalibration()">Manuell korrigieren</button>
+                        <button class="calib-btn" onclick="redetectMarkers()" style="border-color:#0066cc;color:#0066cc" title="Punkte löschen und neu erkennen">&#x21bb; Neu erkennen</button>
+                        <button class="calib-btn" onclick="replaceDrawing()" style="border-color:#666;color:#666" title="Andere Zeichnung laden">&#x1f4c4; Zeichnung tauschen</button>
+                        <button class="calib-btn" onclick="clearAllMarkers()" style="border-color:#dc3545;color:#dc3545">Alle löschen</button>
+                        <button class="calib-btn" id="toggleMarkersBtn" onclick="toggleAllMarkersVisibility()" style="border-color:#555;color:#555">Marker ausblenden</button>
+                    </span>
+                    <span id="drawingZoomTools" style="display:inline-flex;align-items:center;gap:4px;margin-left:auto">
+                        <button class="calib-btn" onclick="drawingZoom(-1)" style="border-color:#555;color:#555;min-width:32px">-</button>
+                        <span id="drawingZoomLevel" style="font-size:0.8rem;color:#666;min-width:40px;text-align:center">100%</span>
+                        <button class="calib-btn" onclick="drawingZoom(1)" style="border-color:#555;color:#555;min-width:32px">+</button>
+                    </span>
                 </div>
             </div>
             <div id="drawingUploadArea" class="drawing-upload-area" onclick="document.getElementById('drawingInput').click()">
@@ -2636,6 +2643,7 @@
                             drawingUploadArea.style.display = "none";
                             drawingViewer.style.display = "block";
                             document.getElementById("drawingToolbar").style.display = "flex";
+                            updateDrawingToolbarForMode();
                             updateCalibPosSelect();
                             // Prefer saved markers from Supabase, then auto-detected, then localStorage
                             if (art.marker_positionen && Object.keys(art.marker_positionen).length > 0) {
@@ -3551,6 +3559,7 @@
                             drawingUploadArea.style.display = "none";
                             drawingViewer.style.display = "block";
                             document.getElementById("drawingToolbar").style.display = "flex";
+                            updateDrawingToolbarForMode();
                             updateCalibPosSelect();
 
                             // Apply server-detected markers
@@ -3600,6 +3609,7 @@
                         drawingUploadArea.style.display = "none";
                         drawingViewer.style.display = "block";
                         document.getElementById("drawingToolbar").style.display = "flex";
+                        updateDrawingToolbarForMode();
                         updateCalibPosSelect();
                         restoreMarkers();
                         document.getElementById("drawingStatus").textContent =
@@ -3901,6 +3911,30 @@
                     renderMarkers();
                 }
             } catch(e) {}
+        }
+
+        // --- Drawing Toolbar Mode ---
+        function updateDrawingToolbarForMode() {
+            const editTools = document.getElementById("drawingEditTools");
+            if (currentMode === 'fertigung') {
+                if (editTools) editTools.style.display = "none";
+            } else {
+                if (editTools) editTools.style.display = "";
+            }
+        }
+
+        // --- Main Drawing Zoom ---
+        let drawingZoomScale = 1;
+        function drawingZoom(direction) {
+            const steps = [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3];
+            const curIdx = steps.indexOf(drawingZoomScale);
+            let newIdx = curIdx >= 0 ? curIdx + direction : 2;
+            newIdx = Math.max(0, Math.min(steps.length - 1, newIdx));
+            drawingZoomScale = steps[newIdx];
+            const inner = document.getElementById("drawingInner");
+            inner.style.width = (drawingZoomScale * 100) + "%";
+            inner.style.minWidth = (drawingZoomScale * 100) + "%";
+            document.getElementById("drawingZoomLevel").textContent = Math.round(drawingZoomScale * 100) + "%";
         }
 
         // --- Drawing Review Overlay ---
