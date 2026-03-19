@@ -2639,15 +2639,26 @@
                     const zd = await res.json();
                     if (zd.image) {
                         drawingImg.src = zd.image;
-                        drawingImg.onload = () => {
+                        drawingImg.onload = async () => {
                             drawingUploadArea.style.display = "none";
                             drawingViewer.style.display = "block";
                             document.getElementById("drawingToolbar").style.display = "flex";
                             updateDrawingToolbarForMode();
                             updateCalibPosSelect();
-                            // Prefer saved markers from Supabase, then auto-detected, then localStorage
-                            if (art.marker_positionen && Object.keys(art.marker_positionen).length > 0) {
-                                drawingMarkers = art.marker_positionen;
+                            // Always fetch fresh markers from Supabase (cache may be stale after Stammdaten edits)
+                            let freshMarkers = null;
+                            try {
+                                const { data: freshArt } = await sb.from("artikel")
+                                    .select("marker_positionen").eq("id", art.id).single();
+                                if (freshArt && freshArt.marker_positionen
+                                    && Object.keys(freshArt.marker_positionen).length > 0) {
+                                    freshMarkers = freshArt.marker_positionen;
+                                }
+                            } catch(e) { console.warn("Frische Marker konnten nicht geladen werden:", e); }
+
+                            if (freshMarkers) {
+                                art.marker_positionen = freshMarkers; // update cache
+                                drawingMarkers = freshMarkers;
                                 renderMarkers();
                                 document.getElementById("drawingStatus").textContent =
                                     `${Object.keys(drawingMarkers).length} Messpunkte geladen`;
