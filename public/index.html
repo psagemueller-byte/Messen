@@ -638,6 +638,16 @@
         }
         .review-pos-item.missing .review-pos-badge { background: #ffe0e0; color: var(--danger); }
         .review-pos-item.placed .review-pos-badge { background: #d4edda; color: var(--success); }
+        .marker-delete-btn {
+            width: 22px; height: 22px;
+            border: none; border-radius: 4px;
+            background: #ffe0e0; color: var(--danger);
+            font-size: 1rem; font-weight: 700;
+            cursor: pointer; display: flex;
+            align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        .marker-delete-btn:hover { background: var(--danger); color: white; }
         .review-drawing-area {
             flex: 1;
             background: white;
@@ -689,6 +699,32 @@
             height: auto;
             user-select: none;
             -webkit-user-drag: none;
+        }
+        .review-zoom-controls {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-right: 8px;
+        }
+        .review-zoom-controls button {
+            width: 32px;
+            height: 32px;
+            border: 2px solid var(--border);
+            border-radius: 6px;
+            background: white;
+            font-size: 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .review-zoom-controls button:hover { background: #f0f0f0; }
+        .review-zoom-controls span {
+            font-size: 0.8rem;
+            min-width: 40px;
+            text-align: center;
+            color: #666;
         }
         .review-marker {
             position: absolute;
@@ -1390,7 +1426,7 @@
         .pin-dialog .pin-btns button.primary { background: var(--primary); color: white; border-color: var(--primary); }
 
         /* Stammdaten Mode */
-        .sd-tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+        .sd-tabs { display: flex; gap: 4px; margin-bottom: 0; flex-wrap: wrap; }
         .sd-tab {
             padding: 10px 20px; border: 2px solid var(--border);
             border-radius: 8px 8px 0 0; background: #f5f5f5;
@@ -1399,6 +1435,15 @@
         }
         .sd-tab:hover { background: #e8f0fe; }
         .sd-tab.active { background: var(--card); border-color: var(--primary); color: var(--primary); }
+        .sd-tab .sd-tab-arrow { font-size: 0.75rem; margin-left: 2px; }
+        .sd-subtabs { display: flex; gap: 2px; padding: 8px 12px 0; background: var(--card); border: 2px solid var(--primary); border-top: none; border-radius: 0 0 8px 8px; margin-bottom: 16px; }
+        .sd-subtab {
+            padding: 6px 16px; background: #f0f0f0; border-radius: 6px 6px 0 0;
+            cursor: pointer; font-size: 0.82rem; font-weight: 500; border: 1px solid transparent; border-bottom: none;
+        }
+        .sd-subtab:hover { background: #e8f0fe; }
+        .sd-subtab.active { background: #fff; border-color: var(--border); color: var(--primary); font-weight: 600; }
+        .sd-tabs-spacer { margin-bottom: 16px; }
         .sd-tab-content { display: none; }
         .sd-tab-content.active { display: block; }
 
@@ -1617,6 +1662,98 @@
             background: #e5e7eb;
             color: #333;
         }
+
+        /* Stammdaten: Artikel- & Adressdaten-Tabellen */
+        .sd-data-panel {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .sd-data-panel h3 { margin: 0 0 12px; font-size: 1.1rem; }
+        .sd-data-toolbar {
+            display: flex; gap: 10px; align-items: center;
+            margin-bottom: 14px; flex-wrap: wrap;
+        }
+        .sd-data-toolbar input[type="text"] {
+            flex: 1; min-width: 200px; padding: 8px 14px;
+            border: 1.5px solid var(--border); border-radius: 8px; font-size: 0.95rem;
+        }
+        .sd-data-toolbar input[type="text"]:focus { outline: none; border-color: var(--primary); }
+        .sd-data-count {
+            font-size: 0.85rem; color: #666; margin-left: auto; white-space: nowrap;
+        }
+        .sd-data-table {
+            width: 100%; border-collapse: collapse; font-size: 0.88rem;
+        }
+        .sd-data-table th {
+            background: #f0f4ff; padding: 10px 12px;
+            text-align: left; font-weight: 600; border-bottom: 2px solid var(--border);
+            position: sticky; top: 0; z-index: 1; cursor: pointer; user-select: none;
+            white-space: nowrap;
+        }
+        .sd-data-table th:hover { background: #dce4f8; }
+        .sd-data-table th .sort-arrow { font-size: 0.7rem; margin-left: 4px; opacity: 0.4; }
+        .sd-data-table th.sorted .sort-arrow { opacity: 1; color: var(--primary); }
+        .sd-data-table td {
+            padding: 8px 12px; border-bottom: 1px solid #eee;
+            max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .sd-data-table tr:hover td { background: #f8faff; }
+        .sd-data-table-wrap {
+            max-height: 60vh; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px;
+        }
+        .sd-data-empty {
+            padding: 32px; text-align: center; color: #999; font-size: 0.95rem;
+        }
+        .sd-data-loading {
+            padding: 32px; text-align: center; color: #666; font-size: 0.95rem;
+        }
+
+        /* Live-Suchfeld-Komponente */
+        .search-box { position: relative; flex: 1; min-width: 220px; }
+        .search-box input {
+            width: 100%; padding: 10px 14px; border: 1.5px solid var(--border);
+            border-radius: 8px; font-size: 1rem; outline: none;
+        }
+        .search-box input:focus { border-color: var(--primary); }
+        .search-box .search-spinner {
+            position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+            font-size: 0.85rem; color: #999; display: none;
+        }
+        .search-box .search-spinner.active { display: block; }
+        .search-results {
+            position: absolute; top: 100%; left: 0; right: 0; z-index: 200;
+            background: white; border: 1.5px solid var(--primary);
+            border-top: none; border-radius: 0 0 8px 8px;
+            max-height: 320px; overflow-y: auto;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+            display: none;
+        }
+        .search-results.open { display: block; }
+        .search-result-item {
+            padding: 10px 14px; cursor: pointer; border-bottom: 1px solid #eee;
+            font-size: 0.9rem; transition: background 0.1s;
+        }
+        .search-result-item:last-child { border-bottom: none; }
+        .search-result-item:hover, .search-result-item.focused { background: #e8f0fe; }
+        .search-result-item .result-title { font-weight: 600; }
+        .search-result-item .result-sub { font-size: 0.8rem; color: #666; margin-top: 2px; }
+        .search-result-empty {
+            padding: 16px; text-align: center; color: #999; font-size: 0.9rem;
+        }
+        .search-selected {
+            display: flex; align-items: center; gap: 8px;
+            background: #e8f5e9; border: 1.5px solid #4caf50; border-radius: 8px;
+            padding: 8px 14px; font-size: 0.95rem;
+        }
+        .search-selected .selected-text { flex: 1; font-weight: 600; }
+        .search-selected .selected-sub { font-size: 0.8rem; color: #555; font-weight: 400; }
+        .search-selected button {
+            background: none; border: none; font-size: 1.2rem; cursor: pointer;
+            color: #999; padding: 0 4px;
+        }
+        .search-selected button:hover { color: #d32f2f; }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -1653,9 +1790,11 @@
         <div class="login-box">
             <h2>Qualitätssicherung</h2>
             <p>Bitte anmelden</p>
-            <input type="text" id="loginUser" placeholder="Benutzername" autocomplete="username">
-            <input type="password" id="loginPass" placeholder="Passwort" autocomplete="current-password">
-            <button onclick="doLogin()">Anmelden</button>
+            <form id="loginForm" onsubmit="event.preventDefault(); doLogin();">
+                <input type="text" id="loginUser" placeholder="Benutzername" autocomplete="username">
+                <input type="password" id="loginPass" placeholder="Passwort" autocomplete="current-password">
+                <button type="submit">Anmelden</button>
+            </form>
             <div class="login-error" id="loginError"></div>
         </div>
     </div>
@@ -1705,13 +1844,38 @@
 
         <!-- Auftrag-Auswahl für Werker -->
         <div class="auftrag-select-panel" id="auftragSelectPanel">
-            <h2>Fertigungsauftrag wählen</h2>
+            <h2>Bestehenden Auftrag laden</h2>
             <div class="artikel-select-row">
                 <select id="fertAuftragSelect" style="min-width:300px">
                     <option value="">– Auftrag wählen –</option>
                 </select>
                 <button class="primary" onclick="loadSelectedAuftrag()">Auftrag laden</button>
                 <button onclick="showAuftragHistorie()">Auftragshistorie</button>
+            </div>
+        </div>
+
+        <!-- Neuer Fertigungsauftrag erstellen -->
+        <div class="auftrag-select-panel" id="fertNeuAuftragPanel">
+            <h2>Neuen Fertigungsauftrag erstellen</h2>
+            <div class="artikel-select-row" style="flex-wrap:wrap;gap:10px">
+                <div class="search-box" id="fertArtikelSearchBox">
+                    <input type="text" id="fertArtikelSearchInput" placeholder="Artikel suchen (mind. 2 Zeichen) ..." autocomplete="off">
+                    <span class="search-spinner" id="fertArtikelSpinner">Suche...</span>
+                    <div class="search-results" id="fertArtikelResults"></div>
+                </div>
+            </div>
+            <div id="fertArtikelSelected" style="margin-top:8px;display:none"></div>
+            <div class="artikel-select-row" style="margin-top:10px;gap:10px">
+                <div class="search-box" id="fertKundeSearchBox">
+                    <input type="text" id="fertKundeSearchInput" placeholder="Kunde/Lieferant suchen ..." autocomplete="off">
+                    <span class="search-spinner" id="fertKundeSpinner">Suche...</span>
+                    <div class="search-results" id="fertKundeResults"></div>
+                </div>
+            </div>
+            <div id="fertKundeSelected" style="margin-top:8px;display:none"></div>
+            <div class="artikel-select-row" style="margin-top:10px;gap:10px">
+                <input type="text" id="fertAuftragNrInput" placeholder="Fertigungsauftragsnr." style="flex:1;padding:10px 14px;border:1.5px solid #ccc;border-radius:8px;font-size:1rem">
+                <button class="primary" onclick="fertCreateAuftrag()" style="padding:10px 24px;font-size:1rem">Auftrag erstellen</button>
             </div>
         </div>
 
@@ -1802,12 +1966,19 @@
                 <h3>Messpunktzeichnung</h3>
                 <div class="drawing-toolbar" id="drawingToolbar" style="display:none">
                     <span id="drawingStatus" style="font-size:0.85rem;color:#666"></span>
-                    <select id="calibPosSelect"></select>
-                    <button class="calib-btn" id="calibBtn" onclick="toggleCalibration()">Manuell korrigieren</button>
-                    <button class="calib-btn" onclick="redetectMarkers()" style="border-color:#0066cc;color:#0066cc" title="Punkte löschen und neu erkennen">&#x21bb; Neu erkennen</button>
-                    <button class="calib-btn" onclick="replaceDrawing()" style="border-color:#666;color:#666" title="Andere Zeichnung laden">&#x1f4c4; Zeichnung tauschen</button>
-                    <button class="calib-btn" onclick="clearAllMarkers()" style="border-color:#dc3545;color:#dc3545">Alle löschen</button>
-                    <button class="calib-btn" id="toggleMarkersBtn" onclick="toggleAllMarkersVisibility()" style="border-color:#555;color:#555">Marker ausblenden</button>
+                    <span id="drawingEditTools">
+                        <select id="calibPosSelect"></select>
+                        <button class="calib-btn" id="calibBtn" onclick="toggleCalibration()">Manuell korrigieren</button>
+                        <button class="calib-btn" onclick="redetectMarkers()" style="border-color:#0066cc;color:#0066cc" title="Punkte löschen und neu erkennen">&#x21bb; Neu erkennen</button>
+                        <button class="calib-btn" onclick="replaceDrawing()" style="border-color:#666;color:#666" title="Andere Zeichnung laden">&#x1f4c4; Zeichnung tauschen</button>
+                        <button class="calib-btn" onclick="clearAllMarkers()" style="border-color:#dc3545;color:#dc3545">Alle löschen</button>
+                        <button class="calib-btn" id="toggleMarkersBtn" onclick="toggleAllMarkersVisibility()" style="border-color:#555;color:#555">Marker ausblenden</button>
+                    </span>
+                    <span id="drawingZoomTools" style="display:inline-flex;align-items:center;gap:4px;margin-left:auto">
+                        <button class="calib-btn" onclick="drawingZoom(-1)" style="border-color:#555;color:#555;min-width:32px">-</button>
+                        <span id="drawingZoomLevel" style="font-size:0.8rem;color:#666;min-width:40px;text-align:center">100%</span>
+                        <button class="calib-btn" onclick="drawingZoom(1)" style="border-color:#555;color:#555;min-width:32px">+</button>
+                    </span>
                 </div>
             </div>
             <div id="drawingUploadArea" class="drawing-upload-area" onclick="document.getElementById('drawingInput').click()">
@@ -1838,15 +2009,26 @@
         <div class="we-artikel-panel" id="weAuftragForm">
             <h2>Wareneingang – Neuer Prüfauftrag</h2>
             <div class="artikel-select-row">
-                <select id="weArtikelSelect">
-                    <option value="">– Artikel wählen –</option>
-                </select>
+                <div class="search-box" id="weArtikelSearchBox">
+                    <input type="text" id="weArtikelSearchInput" placeholder="Artikel suchen (mind. 2 Zeichen) ..." autocomplete="off">
+                    <span class="search-spinner" id="weArtikelSpinner">Suche...</span>
+                    <div class="search-results" id="weArtikelResults"></div>
+                </div>
             </div>
+            <div id="weArtikelSelected" style="margin-top:8px;display:none"></div>
+            <!-- Hidden selects for JS compatibility -->
+            <select id="weArtikelSelect" style="display:none"><option value="">–</option></select>
+            <select id="weLieferantSelect" style="display:none"><option value="">–</option></select>
             <div class="artikel-select-row" style="margin-top:8px">
-                <select id="weLieferantSelect">
-                    <option value="">– Lieferant wählen –</option>
-                </select>
-                <input type="text" id="weLieferscheinNr" placeholder="Lieferscheinnummer" style="flex:1;padding:8px 12px;border:1px solid #ccc;border-radius:6px;font-size:1rem;">
+                <div class="search-box" id="weLieferantSearchBox">
+                    <input type="text" id="weLieferantSearchInput" placeholder="Kunde/Lieferant suchen ..." autocomplete="off">
+                    <span class="search-spinner" id="weLieferantSpinner">Suche...</span>
+                    <div class="search-results" id="weLieferantResults"></div>
+                </div>
+            </div>
+            <div id="weLieferantSelected" style="margin-top:8px;display:none"></div>
+            <div class="artikel-select-row" style="margin-top:8px">
+                <input type="text" id="weLieferscheinNr" placeholder="Lieferscheinnummer" style="flex:1;padding:10px 14px;border:1.5px solid #ccc;border-radius:8px;font-size:1rem;">
             </div>
             <div style="margin-top:12px">
                 <button class="primary" onclick="weCreatePruefauftrag()" style="width:100%;padding:12px;font-size:1.05rem">Prüfauftrag erstellen</button>
@@ -1940,7 +2122,7 @@
 
         <!-- Artikeldatenbank -->
         <div class="artikel-panel" id="sdArtikelPanel">
-            <h2>Artikeldatenbank</h2>
+            <h2>Artikeldatenbank <span id="sdArtikelCount" style="font-weight:400;font-size:0.85rem;color:#666"></span></h2>
             <div class="artikel-select-row">
                 <select id="sdArtikelSelect">
                     <option value="">– Artikel wählen –</option>
@@ -1949,10 +2131,21 @@
                 <button onclick="sdToggleArtikelForm('edit')">Bearbeiten</button>
                 <button class="danger" onclick="deleteSelectedArtikel()">Löschen</button>
                 <button id="sdLockBtn" onclick="toggleArtikelLock()">Sperren</button>
-                <input type="text" id="sdAuftragNrInput" placeholder="Fertigungsauftragsnr." style="width:200px;padding:6px 10px;border:1.5px solid #ccc;border-radius:6px;font-size:.95rem;margin-left:auto">
-                <button class="primary" onclick="sdCreateFertigungsauftrag()">Auftrag erstellen</button>
+                <!-- Auftragserstellen entfernt - nur ueber Fertigung/Wareneingang -->
+                <input type="text" id="sdAuftragNrInput" style="display:none">
             </div>
             <div class="artikel-form" id="sdArtikelForm">
+                <!-- Airtable article search (shown in "new" mode) -->
+                <div id="sdAfAirtableSearch" style="display:none; margin-bottom:14px;">
+                    <label style="font-weight:600;font-size:0.9rem;margin-bottom:6px;display:block">Artikel aus ERP suchen (min. 2 Zeichen):</label>
+                    <div class="search-box" style="position:relative">
+                        <input type="text" id="sdAfSearchInput" placeholder="Artikelnr. oder Bezeichnung eingeben..." autocomplete="off" style="width:100%;padding:10px 14px;font-size:0.95rem;border:1.5px solid #ccc;border-radius:8px">
+                        <span class="search-spinner" id="sdAfSearchSpinner"></span>
+                        <div class="search-results" id="sdAfSearchResults"></div>
+                    </div>
+                    <div class="search-selected" id="sdAfSearchSelected" style="display:none"></div>
+                </div>
+                <div id="sdAfDuplicateWarning" style="display:none;background:#fff3cd;border:1px solid #ffc107;color:#856404;padding:10px 14px;border-radius:8px;margin-bottom:14px;font-size:0.92rem;line-height:1.4"></div>
                 <div class="form-grid">
                     <div><label>Artikelnummer *</label><input id="sdAfArtikelNr"></div>
                     <div><label>Bezeichnung</label><input id="sdAfBezeichnung"></div>
@@ -1992,14 +2185,18 @@
         </div>
 
         <!-- Stammdaten Tabs: Zeichnung + WE-Prüfpunkte -->
-        <div id="sdTabArea" style="display:none">
-            <div class="sd-tabs">
-                <div class="sd-tab active" onclick="sdSwitchTab('zeichnung')">Zeichnung sichten</div>
-                <div class="sd-tab" onclick="sdSwitchTab('wepruef')">WE-Prüfpunkte</div>
-                <div class="sd-tab" onclick="sdSwitchTab('presets')">Prüf-Presets</div>
-                <div class="sd-tab" onclick="sdSwitchTab('freigabe')">WE-Freigabe</div>
+        <div id="sdTabArea">
+            <div class="sd-tabs" id="sdMainTabs">
+                <div class="sd-tab active" data-tab="fertigung" onclick="sdSwitchTab('zeichnung')">Fertigung</div>
+                <div class="sd-tab" data-tab="wareneingang" onclick="sdSwitchTabGroup('wepruef')">Wareneingang <span class="sd-tab-arrow">▾</span></div>
             </div>
-            <div class="sd-tab-content active" id="sdTabZeichnung">
+            <div class="sd-subtabs" id="sdSubtabsWE" style="display:none">
+                <div class="sd-subtab active" data-subtab="wepruef" onclick="sdSwitchSubTab('wepruef')">WE-Prüfpunkte</div>
+                <div class="sd-subtab" data-subtab="presets" onclick="sdSwitchSubTab('presets')">Prüf-Presets</div>
+                <div class="sd-subtab" data-subtab="freigabe" onclick="sdSwitchSubTab('freigabe')">WE-Freigabe</div>
+            </div>
+            <div class="sd-tabs-spacer" id="sdTabsSpacer"></div>
+            <div class="sd-tab-content" id="sdTabZeichnung">
                 <button class="primary" onclick="openDrawingReview()" id="sdReviewDrawingBtn">Zeichnung und Messpunkte prüfen</button>
             </div>
             <div class="sd-tab-content" id="sdTabWEPruef">
@@ -2104,6 +2301,7 @@
                     Keine gesperrten Prüfaufträge vorhanden.
                 </div>
             </div>
+
         </div>
 
         </div><!-- /stammdatenMode -->
@@ -2177,15 +2375,8 @@
             }
         }
 
-        // Enter-Taste im Login
+        // Auto-login if token exists
         document.addEventListener("DOMContentLoaded", () => {
-            document.getElementById("loginPass").addEventListener("keydown", (e) => {
-                if (e.key === "Enter") doLogin();
-            });
-            document.getElementById("loginUser").addEventListener("keydown", (e) => {
-                if (e.key === "Enter") document.getElementById("loginPass").focus();
-            });
-            // Auto-login if token exists
             if (authToken) {
                 fetch("/api/config", { headers: { "X-Auth-Token": authToken } })
                     .then(r => { if (r.ok) { document.getElementById("loginOverlay").classList.add("hidden"); initApp(); } else { sessionStorage.removeItem("authToken"); authToken = ""; } })
@@ -2448,14 +2639,26 @@
                     const zd = await res.json();
                     if (zd.image) {
                         drawingImg.src = zd.image;
-                        drawingImg.onload = () => {
+                        drawingImg.onload = async () => {
                             drawingUploadArea.style.display = "none";
                             drawingViewer.style.display = "block";
                             document.getElementById("drawingToolbar").style.display = "flex";
+                            updateDrawingToolbarForMode();
                             updateCalibPosSelect();
-                            // Prefer saved markers from Supabase, then auto-detected, then localStorage
-                            if (art.marker_positionen && Object.keys(art.marker_positionen).length > 0) {
-                                drawingMarkers = art.marker_positionen;
+                            // Always fetch fresh markers from Supabase (cache may be stale after Stammdaten edits)
+                            let freshMarkers = null;
+                            try {
+                                const { data: freshArt } = await sb.from("artikel")
+                                    .select("marker_positionen").eq("id", art.id).single();
+                                if (freshArt && freshArt.marker_positionen
+                                    && Object.keys(freshArt.marker_positionen).length > 0) {
+                                    freshMarkers = freshArt.marker_positionen;
+                                }
+                            } catch(e) { console.warn("Frische Marker konnten nicht geladen werden:", e); }
+
+                            if (freshMarkers) {
+                                art.marker_positionen = freshMarkers; // update cache
+                                drawingMarkers = freshMarkers;
                                 renderMarkers();
                                 document.getElementById("drawingStatus").textContent =
                                     `${Object.keys(drawingMarkers).length} Messpunkte geladen`;
@@ -2465,7 +2668,9 @@
                                     drawingMarkers[m.pos_nr] = { x: m.x, y: m.y };
                                 }
                                 renderMarkers();
-                                saveMarkers();
+                                // Only save auto-detected markers in Stammdaten mode
+                                // (don't overwrite manually placed Stammdaten markers from Fertigung)
+                                if (currentMode === 'stammdaten') saveMarkers();
                                 document.getElementById("drawingStatus").textContent =
                                     `${zd.matched_markers} Messpunkte erkannt`;
                             } else {
@@ -3113,6 +3318,9 @@
                 partCount = maxTeil;
                 document.getElementById("partCount").textContent = String(partCount);
 
+                // Re-render measurements and markers with correct partCount
+                updateMeasurements();
+
                 showAuftragPanel();
             } catch(e) { alert("Fehler beim Laden: " + e.message); }
         }
@@ -3367,6 +3575,7 @@
                             drawingUploadArea.style.display = "none";
                             drawingViewer.style.display = "block";
                             document.getElementById("drawingToolbar").style.display = "flex";
+                            updateDrawingToolbarForMode();
                             updateCalibPosSelect();
 
                             // Apply server-detected markers
@@ -3416,6 +3625,7 @@
                         drawingUploadArea.style.display = "none";
                         drawingViewer.style.display = "block";
                         document.getElementById("drawingToolbar").style.display = "flex";
+                        updateDrawingToolbarForMode();
                         updateCalibPosSelect();
                         restoreMarkers();
                         document.getElementById("drawingStatus").textContent =
@@ -3690,6 +3900,9 @@
                 if (sb && artId) {
                     try {
                         await sb.from("artikel").update({ marker_positionen: drawingMarkers }).eq("id", artId);
+                        // Also update artikelList cache so Fertigung mode gets fresh data
+                        const cached = artikelList.find(a => a.id === artId);
+                        if (cached) cached.marker_positionen = JSON.parse(JSON.stringify(drawingMarkers));
                     } catch(e) { console.error("Marker-Speicherung fehlgeschlagen:", e); }
                 }
             }, 500);
@@ -3719,44 +3932,113 @@
             } catch(e) {}
         }
 
+        // --- Drawing Toolbar Mode ---
+        function updateDrawingToolbarForMode() {
+            const editTools = document.getElementById("drawingEditTools");
+            if (currentMode === 'fertigung') {
+                if (editTools) editTools.style.display = "none";
+            } else {
+                if (editTools) editTools.style.display = "";
+            }
+        }
+
+        // --- Main Drawing Zoom ---
+        let drawingZoomScale = 1;
+        function drawingZoom(direction) {
+            const steps = [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3];
+            const curIdx = steps.indexOf(drawingZoomScale);
+            let newIdx = curIdx >= 0 ? curIdx + direction : 2;
+            newIdx = Math.max(0, Math.min(steps.length - 1, newIdx));
+            drawingZoomScale = steps[newIdx];
+            const inner = document.getElementById("drawingInner");
+            inner.style.width = (drawingZoomScale * 100) + "%";
+            inner.style.minWidth = (drawingZoomScale * 100) + "%";
+            document.getElementById("drawingZoomLevel").textContent = Math.round(drawingZoomScale * 100) + "%";
+        }
+
         // --- Drawing Review Overlay ---
         let reviewActive = false;
         let reviewSelectedPos = null;
+        let reviewZoomScale = 1;
 
-        function openDrawingReview() {
+        function reviewZoom(direction) {
+            const steps = [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3];
+            const curIdx = steps.indexOf(reviewZoomScale);
+            let newIdx = curIdx >= 0 ? curIdx + direction : 2;
+            newIdx = Math.max(0, Math.min(steps.length - 1, newIdx));
+            reviewZoomScale = steps[newIdx];
+            const inner = document.getElementById("reviewDrawingInner");
+            // Change the actual width so the drawing gets larger/smaller
+            // Markers are %-positioned so they scale with the drawing
+            inner.style.width = (reviewZoomScale * 100) + "%";
+            inner.style.minWidth = (reviewZoomScale * 100) + "%";
+            document.getElementById("reviewZoomLevel").textContent =
+                Math.round(reviewZoomScale * 100) + "%";
+        }
+
+        async function openDrawingReview() {
+            const artId = getCurrentArtikelId();
+            const art = artId ? artikelList.find(a => a.id === artId) : null;
+
             // Use drawingImg or weDrawingImg as fallback (Stammdaten mode)
             const weImg = document.getElementById("weDrawingImg");
-            const hasFert = drawingImg.src && drawingImg.src !== location.href;
+            let hasFert = drawingImg.src && drawingImg.src !== location.href;
             const hasWE = weImg && weImg.src && weImg.src !== location.href;
-            const imgSrc = hasFert ? drawingImg.src : (hasWE ? weImg.src : null);
+            let imgSrc = hasFert ? drawingImg.src : (hasWE ? weImg.src : null);
+
+            // In Stammdaten mode, load drawing on-demand if not yet loaded
+            if (!imgSrc && currentMode === 'stammdaten' && art && art.zeichnung_file) {
+                try {
+                    const { data: blob, error } = await sb.storage.from(BUCKET).download(art.zeichnung_file);
+                    if (error) throw error;
+                    const fd = new FormData();
+                    fd.append("file", blob, art.zeichnung_file.split("/").pop());
+                    const res = await authFetch("/api/upload-drawing", { method: "POST", body: fd });
+                    const zd = await res.json();
+                    if (zd.image) {
+                        drawingImg.src = zd.image;
+                        imgSrc = zd.image;
+                        hasFert = true;
+                        // Load markers from article
+                        if (art.marker_positionen && Object.keys(art.marker_positionen).length > 0) {
+                            drawingMarkers = art.marker_positionen;
+                        }
+                    }
+                } catch (e) {
+                    alert("Fehler beim Laden der Zeichnung: " + e.message);
+                    return;
+                }
+            }
 
             if (!imgSrc) {
                 alert("Keine Zeichnung vorhanden. Bitte zuerst einen Artikel mit Zeichnung laden.");
                 return;
             }
 
-            // If opening from Stammdaten and positions not loaded yet, load them
-            if (currentMode === 'stammdaten' && allPositions.length === 0) {
-                const artId = getCurrentArtikelId();
-                const art = artikelList.find(a => a.id === artId);
-                if (art && art.messplan_file) {
-                    alert("Messplan wird geladen... Bitte erneut klicken.");
-                    (async () => {
-                        const { data: blob, error } = await sb.storage.from(BUCKET).download(art.messplan_file);
-                        if (!error) {
-                            const fd = new FormData();
-                            fd.append("file", blob, art.messplan_file.split("/").pop());
-                            const res = await authFetch("/api/upload", { method: "POST", body: fd });
-                            const result = await res.json();
-                            if (result.positions) loadData(result, `Artikel ${art.artikel_nr}`);
-                        }
-                    })();
-                    return;
+            // In Stammdaten mode, load messplan positions on-demand if not yet loaded
+            if (currentMode === 'stammdaten' && allPositions.length === 0 && art && art.messplan_file) {
+                try {
+                    const { data: blob, error } = await sb.storage.from(BUCKET).download(art.messplan_file);
+                    if (!error) {
+                        const fd = new FormData();
+                        fd.append("file", blob, art.messplan_file.split("/").pop());
+                        const res = await authFetch("/api/upload", { method: "POST", body: fd });
+                        const result = await res.json();
+                        if (result.positions) loadData(result, `Artikel ${art.artikel_nr}`);
+                    }
+                } catch (e) {
+                    console.warn("Messplan konnte nicht geladen werden:", e);
                 }
             }
 
             reviewActive = true;
             reviewSelectedPos = null;
+            // Reset zoom
+            reviewZoomScale = 1;
+            const inner = document.getElementById("reviewDrawingInner");
+            inner.style.width = "100%";
+            inner.style.minWidth = "100%";
+            document.getElementById("reviewZoomLevel").textContent = "100%";
             const overlay = document.getElementById("reviewOverlay");
             overlay.classList.add("active");
             document.getElementById("reviewDrawingImg").src = imgSrc;
@@ -3775,6 +4057,55 @@
             // Sync markers back to main view
             renderMarkers();
             saveMarkers();
+        }
+
+        async function rerunAutoDetection() {
+            const artId = getCurrentArtikelId();
+            const art = artId ? artikelList.find(a => a.id === artId) : null;
+            if (!art || !art.zeichnung_file) {
+                alert("Keine Zeichnung vorhanden.");
+                return;
+            }
+            const btn = document.getElementById("reviewAutoDetectBtn");
+            btn.disabled = true;
+            btn.textContent = "Erkennung läuft\u2026";
+            try {
+                const { data: blob, error } = await sb.storage.from(BUCKET).download(art.zeichnung_file);
+                if (error) throw error;
+                const fd = new FormData();
+                fd.append("file", blob, art.zeichnung_file.split("/").pop());
+                // Send expected position numbers so backend can constrain OCR
+                const entries = getUniqueDrawingPositions();
+                const expectedPositions = entries.map(([key]) => key);
+                fd.append("expected_positions", JSON.stringify(expectedPositions));
+                const res = await authFetch("/api/upload-drawing", { method: "POST", body: fd });
+                const zd = await res.json();
+                if (zd.markers && zd.markers.length > 0) {
+                    let added = 0;
+                    for (const m of zd.markers) {
+                        const key = String(m.pos_nr);
+                        if (!drawingMarkers[key]) {
+                            drawingMarkers[key] = { x: m.x, y: m.y };
+                            added++;
+                        }
+                    }
+                    renderReviewPositions();
+                    renderReviewMarkers();
+                    saveMarkers();
+                    const dbg = zd.debug || {};
+                    const vn = (dbg.vector_found || []).length;
+                    const rn = (dbg.raster_found || []).length;
+                    console.log("Auto-Erkennung Debug:", dbg);
+                    showSaveToast(`${added} neue Messpunkte erkannt (Vektor: ${vn}, Raster: ${rn})`);
+                } else {
+                    showSaveToast("Keine Messpunkte erkannt");
+                }
+            } catch (e) {
+                alert("Fehler bei Auto-Erkennung: " + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "\u21bb Auto-Erkennung";
+            }
         }
 
         function getUniqueDrawingPositions() {
@@ -3809,6 +4140,7 @@
                     <div class="review-pos-dot"></div>
                     <span class="review-pos-name"><strong>Pos ${key}</strong> – ${pos.pruefmerkmal || ""}</span>
                     <span class="review-pos-badge">${hasMarker ? "gesetzt" : "fehlt"}</span>
+                    ${hasMarker ? `<button class="marker-delete-btn" onclick="event.stopPropagation();deleteMarker('${key}')" title="Marker entfernen">&times;</button>` : ""}
                     <button class="marker-eye-btn" onclick="event.stopPropagation();toggleMarkerVisibility('${key}');renderReviewPositions()" title="${isHidden ? 'Einblenden' : 'Ausblenden'}">${isHidden ? '\u{1F6AB}' : '\u{1F441}'}</button>
                 </div>`;
             }
@@ -3839,6 +4171,22 @@
             // Show/hide button based on state
             const btn = document.getElementById("reviewDrawingBtn");
             if (btn) btn.style.display = (allPositions.length > 0 && drawingImg.src && drawingImg.src !== location.href) ? "" : "none";
+        }
+
+        function deleteAllMarkers() {
+            if (!confirm("Alle Markierungen entfernen?")) return;
+            drawingMarkers = {};
+            renderReviewPositions();
+            renderReviewMarkers();
+            saveMarkers();
+        }
+
+        function deleteMarker(key) {
+            delete drawingMarkers[key];
+            renderReviewPositions();
+            renderReviewMarkers();
+            saveMarkers();
+            selectReviewPos(key);
         }
 
         function selectReviewPos(key) {
@@ -3944,6 +4292,7 @@
             if (mode === "fertigung") {
                 document.querySelector(".header h1").textContent = "QS Fertigung";
                 populateFertAuftragSelect();
+                initFertSearches();
             } else if (mode === "wareneingang") {
                 document.querySelector(".header h1").textContent = "QS Wareneingang";
                 weMode = 'check'; // Werker sieht nur Checkliste
@@ -3952,16 +4301,13 @@
                 document.getElementById("wareneingangMode").appendChild(weWork);
                 document.getElementById("weEditSidebar").style.display = "none";
                 document.getElementById("wePrueferSidebar").style.display = "";
-                wePopulateArtikelSelect();
-                if (lieferantenList.length === 0) {
-                    fetchLieferanten().then(() => wePopulateLieferantSelect());
-                } else {
-                    wePopulateLieferantSelect();
-                }
+                initWeSearches();
             } else if (mode === "stammdaten") {
                 document.querySelector(".header h1").textContent = "Stammdaten";
                 document.getElementById("headerInfo").textContent = "Artikelverwaltung";
                 sdPopulateArtikelSelect();
+                // Default: Fertigung-Tab aktiv
+                sdSwitchTab('zeichnung');
             } else {
                 document.querySelector(".header h1").textContent = "Qualitätssicherung";
                 document.getElementById("headerInfo").textContent = "Bereich wählen";
@@ -3984,9 +4330,9 @@
             const errEl = document.getElementById("pinError");
             errEl.textContent = "";
             try {
-                const res = await authFetch("/api/verify-pin", {
+                const res = await fetch("/api/verify-pin", {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: { "Content-Type": "application/json", ...authHeaders() },
                     body: JSON.stringify({ pin })
                 });
                 const data = await res.json();
@@ -4032,17 +4378,27 @@
         // --- Stammdaten: Artikelverwaltung ---
         function sdPopulateArtikelSelect() {
             const sel = document.getElementById("sdArtikelSelect");
-            sel.innerHTML = '<option value="">– Artikel wählen –</option>';
-            for (const a of artikelList) {
+            sel.innerHTML = '<option value="">– Artikel wählen (nur konfigurierte) –</option>';
+            // In Stammdaten: nur Artikel mit Messplan oder Zeichnung anzeigen
+            const configured = artikelList.filter(a =>
+                a.messplan_file || a.zeichnung_file
+            );
+            for (const a of configured) {
                 const lock = a.gesperrt ? "\u{1F512} " : "";
                 const label = `${lock}${a.artikel_nr} – ${a.bezeichnung}` + (a.version ? ` (V${a.version})` : "");
                 sel.innerHTML += `<option value="${a.id}">${label}</option>`;
             }
+            // Info-Text
+            const countEl = document.getElementById("sdArtikelCount");
+            if (countEl) countEl.textContent = `${configured.length} von ${artikelList.length} Artikeln konfiguriert`;
         }
         document.getElementById("sdArtikelSelect").addEventListener("change", async function() {
             const artId = parseInt(this.value);
             const art = artikelList.find(a => a.id === artId);
-            document.getElementById("sdTabArea").style.display = art ? "" : "none";
+            // Article-dependent tabs: hide content if no article selected
+            const noArt = !art;
+            document.getElementById("sdTabZeichnung").querySelectorAll("button").forEach(b => b.disabled = noArt);
+            document.getElementById("sdTabWEPruef").querySelectorAll("button").forEach(b => b.disabled = noArt);
             document.getElementById("sdLockBtn").textContent = art && art.gesperrt ? "Freigeben" : "Sperren";
             if (art) {
                 // Sync the hidden artikelSelect for compatibility
@@ -4098,11 +4454,19 @@
         });
 
         let sdFormMode = null; // null | 'new' | 'edit'
+        let sdAfSearchBox = null; // search box instance for new article form
+
         function sdToggleArtikelForm(mode) {
             const form = document.getElementById("sdArtikelForm");
             if (!mode || sdFormMode === mode) {
                 form.classList.remove("visible");
                 sdFormMode = null;
+                document.getElementById("sdAfAirtableSearch").style.display = "none";
+                document.getElementById("sdAfDuplicateWarning").style.display = "none";
+                const saveBtn = document.getElementById("sdAfSaveBtn");
+                saveBtn.disabled = false;
+                saveBtn.style.opacity = "";
+                if (sdAfSearchBox) sdAfSearchBox.clear();
                 return;
             }
             sdFormMode = mode;
@@ -4116,7 +4480,58 @@
                 document.getElementById("sdAfTaktzeit").value = "30";
                 document.getElementById("sdAfMessplanStatus").textContent = "Keine Datei";
                 document.getElementById("sdAfZeichnungStatus").textContent = "Keine Datei";
+                // Show Airtable search and init if needed
+                document.getElementById("sdAfAirtableSearch").style.display = "";
+                if (!sdAfSearchBox) {
+                    sdAfSearchBox = initSearchBox({
+                        inputId: "sdAfSearchInput",
+                        spinnerId: "sdAfSearchSpinner",
+                        resultsId: "sdAfSearchResults",
+                        selectedId: "sdAfSearchSelected",
+                        apiUrl: "/api/artikel-search",
+                        renderItem: item => `<strong>${String(item.artikel_nr)}</strong> – ${String(item.bezeichnung || "")}`,
+                        renderSelected: item => `<strong>${String(item.artikel_nr)}</strong> – ${String(item.bezeichnung || "")}`,
+                        onSelect: (item) => {
+                            // Auto-fill form fields from Airtable data
+                            document.getElementById("sdAfArtikelNr").value = String(item.artikel_nr || "");
+                            document.getElementById("sdAfBezeichnung").value = String(item.bezeichnung || "");
+                            document.getElementById("sdAfIdentNr").value = String(item.bestellnummer || "");
+                            document.getElementById("sdAfZeichnungsNr").value = String(item.zeichnungs_nr || "");
+                            document.getElementById("sdAfVersion").value = String(item.version || "");
+                            // Check if article already exists in local database
+                            const existing = artikelList.find(a => a.artikel_nr === String(item.artikel_nr || ""));
+                            const warn = document.getElementById("sdAfDuplicateWarning");
+                            const saveBtn = document.getElementById("sdAfSaveBtn");
+                            if (existing) {
+                                const ver = existing.version ? ` (Version: ${existing.version})` : "";
+                                warn.textContent = `Artikel ${existing.artikel_nr}${ver} existiert bereits in der Artikeldatenbank. Bitte den bestehenden Artikel über „Bearbeiten" anpassen.`;
+                                warn.style.display = "";
+                                saveBtn.disabled = true;
+                                saveBtn.style.opacity = "0.5";
+                            } else {
+                                warn.style.display = "none";
+                                saveBtn.disabled = false;
+                                saveBtn.style.opacity = "";
+                            }
+                        },
+                        onClear: () => {
+                            document.getElementById("sdAfArtikelNr").value = "";
+                            document.getElementById("sdAfBezeichnung").value = "";
+                            document.getElementById("sdAfIdentNr").value = "";
+                            document.getElementById("sdAfZeichnungsNr").value = "";
+                            document.getElementById("sdAfVersion").value = "";
+                            document.getElementById("sdAfDuplicateWarning").style.display = "none";
+                            const saveBtn = document.getElementById("sdAfSaveBtn");
+                            saveBtn.disabled = false;
+                            saveBtn.style.opacity = "";
+                        }
+                    });
+                } else {
+                    sdAfSearchBox.clear();
+                }
             } else if (mode === "edit") {
+                document.getElementById("sdAfAirtableSearch").style.display = "none";
+                if (sdAfSearchBox) sdAfSearchBox.clear();
                 const sel = document.getElementById("sdArtikelSelect");
                 const art = artikelList.find(a => a.id === parseInt(sel.value));
                 if (!art) { alert("Bitte zuerst einen Artikel wählen."); sdToggleArtikelForm(); return; }
@@ -4213,6 +4628,7 @@
                 await fetchArtikelList();
                 sdPopulateArtikelSelect();
                 document.getElementById("sdArtikelSelect").value = artId;
+                document.getElementById("sdArtikelSelect").dispatchEvent(new Event("change"));
                 sdToggleArtikelForm();
                 document.getElementById("sdAfMessplanInput").value = "";
                 document.getElementById("sdAfZeichnungInput").value = "";
@@ -4238,20 +4654,28 @@
             } catch(e) { alert("Fehler: " + e.message); }
         }
 
-        function sdSwitchTab(tab) {
-            document.querySelectorAll(".sd-tab").forEach((t, i) => {
-                t.classList.toggle("active",
-                    (tab === "zeichnung" && i === 0) ||
-                    (tab === "wepruef" && i === 1) ||
-                    (tab === "presets" && i === 2) ||
-                    (tab === "freigabe" && i === 3)
-                );
-            });
-            document.getElementById("sdTabZeichnung").classList.toggle("active", tab === "zeichnung");
-            document.getElementById("sdTabWEPruef").classList.toggle("active", tab === "wepruef");
-            document.getElementById("sdTabPresets").classList.toggle("active", tab === "presets");
-            document.getElementById("sdTabFreigabe").classList.toggle("active", tab === "freigabe");
+        const SD_TAB_IDS = {
+            zeichnung: "sdTabZeichnung",
+            wepruef: "sdTabWEPruef",
+            presets: "sdTabPresets",
+            freigabe: "sdTabFreigabe",
+        };
 
+        // Map content tabs to their main tab group
+        const SD_TAB_TO_MAIN = {
+            zeichnung: "fertigung",
+            wepruef: "wareneingang",
+            presets: "wareneingang",
+            freigabe: "wareneingang",
+        };
+
+        const SD_WE_SUBTABS = ["wepruef", "presets", "freigabe"];
+
+        function sdActivateContentTab(tab) {
+            // Show/hide content panels
+            for (const [key, elId] of Object.entries(SD_TAB_IDS)) {
+                document.getElementById(elId).classList.toggle("active", key === tab);
+            }
             // Move the shared WE work area into the active tab content
             const weWork = document.getElementById("weWorkArea");
             if (tab === "wepruef") {
@@ -4262,16 +4686,439 @@
                 weWork.style.display = "flex";
                 weRenderAll();
             } else {
-                // Move it back to wareneingangMode
                 document.getElementById("wareneingangMode").appendChild(weWork);
             }
+            if (tab === "presets") loadPresets();
+            if (tab === "freigabe") loadFreigabeListe();
+        }
 
-            if (tab === "presets") {
-                loadPresets();
+        function sdHighlightMainTab(mainTab) {
+            document.querySelectorAll("#sdMainTabs .sd-tab").forEach(t => {
+                t.classList.toggle("active", t.dataset.tab === mainTab);
+            });
+        }
+
+        function sdSwitchTab(tab) {
+            // Direct tab (artikeldaten, zeichnung/fertigung, adressen)
+            const mainTab = SD_TAB_TO_MAIN[tab];
+            sdHighlightMainTab(mainTab);
+            // Hide WE sub-tabs
+            document.getElementById("sdSubtabsWE").style.display = "none";
+            sdActivateContentTab(tab);
+        }
+
+        function sdSwitchTabGroup(defaultSubTab) {
+            sdHighlightMainTab("wareneingang");
+            // Show WE sub-tabs
+            const subtabBar = document.getElementById("sdSubtabsWE");
+            subtabBar.style.display = "flex";
+            // Activate the default (or remembered) sub-tab
+            sdSwitchSubTab(defaultSubTab || "wepruef");
+        }
+
+        function sdSwitchSubTab(tab) {
+            document.querySelectorAll("#sdSubtabsWE .sd-subtab").forEach(t => {
+                t.classList.toggle("active", t.dataset.subtab === tab);
+            });
+            sdActivateContentTab(tab);
+        }
+
+        // ===================================================================
+        // ARTIKELDATEN (Airtable) - Anzeige im Stammdaten-Modus
+        // ===================================================================
+        let artikeldatenCache = null;
+        let artikeldatenSortCol = "artikel_nr";
+        let artikeldatenSortAsc = true;
+
+        async function loadArtikeldaten() {
+            if (artikeldatenCache) { renderArtikeldaten(); return; }
+            document.getElementById("artikeldatenLoading").style.display = "";
+            document.getElementById("artikeldatenEmpty").style.display = "none";
+            document.getElementById("artikeldatenBody").innerHTML = "";
+            try {
+                const res = await authFetch("/api/artikel-stamm");
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+                artikeldatenCache = data.artikel || [];
+                renderArtikeldaten();
+            } catch(e) {
+                document.getElementById("artikeldatenLoading").textContent = "Fehler: " + e.message;
             }
-            if (tab === "freigabe") {
-                loadFreigabeListe();
+        }
+
+        function renderArtikeldaten() {
+            const search = (document.getElementById("artikeldatenSearch").value || "").toLowerCase();
+            let rows = artikeldatenCache || [];
+            if (search) {
+                rows = rows.filter(r =>
+                    (r.artikel_nr || "").toLowerCase().includes(search) ||
+                    (r.bezeichnung || "").toLowerCase().includes(search) ||
+                    (r.kurzbezeichnung || "").toLowerCase().includes(search) ||
+                    (r.zeichnungs_nr || "").toLowerCase().includes(search) ||
+                    (r.bestellnummer || "").toLowerCase().includes(search)
+                );
             }
+            rows = [...rows].sort((a, b) => {
+                const va = (a[artikeldatenSortCol] || "").toString().toLowerCase();
+                const vb = (b[artikeldatenSortCol] || "").toString().toLowerCase();
+                return artikeldatenSortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+            });
+
+            document.getElementById("artikeldatenLoading").style.display = "none";
+            document.getElementById("artikeldatenEmpty").style.display = rows.length ? "none" : "";
+            document.getElementById("artikeldatenCount").textContent = `${rows.length} von ${(artikeldatenCache||[]).length} Artikel`;
+
+            // Update sort arrows
+            document.querySelectorAll("#artikeldatenTable th").forEach(th => {
+                const col = th.getAttribute("onclick")?.match(/sortArtikeldaten\('(.+?)'\)/)?.[1];
+                const arrow = th.querySelector(".sort-arrow");
+                if (col === artikeldatenSortCol) {
+                    th.classList.add("sorted");
+                    if (arrow) arrow.innerHTML = artikeldatenSortAsc ? "&#9650;" : "&#9660;";
+                } else {
+                    th.classList.remove("sorted");
+                    if (arrow) arrow.innerHTML = "&#9650;";
+                }
+            });
+
+            // Limit to 200 rows for browser performance
+            const MAX_ROWS = 200;
+            const shown = rows.slice(0, MAX_ROWS);
+
+            if (rows.length > MAX_ROWS) {
+                document.getElementById("artikeldatenCount").textContent =
+                    `Zeige ${MAX_ROWS} von ${rows.length} Treffern (${(artikeldatenCache||[]).length} gesamt) – Suche verfeinern`;
+            }
+
+            const tbody = document.getElementById("artikeldatenBody");
+            const esc = t => String(t == null ? "" : t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+            tbody.innerHTML = shown.map(r => `<tr>
+                <td title="${esc(r.artikel_nr)}">${esc(r.artikel_nr)}</td>
+                <td title="${esc(r.bezeichnung)}">${esc(r.bezeichnung)}</td>
+                <td title="${esc(r.kurzbezeichnung)}">${esc(r.kurzbezeichnung)}</td>
+                <td title="${esc(r.zeichnungs_nr)}">${esc(r.zeichnungs_nr)}</td>
+                <td title="${esc(r.bestellnummer)}">${esc(r.bestellnummer)}</td>
+                <td>${esc(r.gewicht)}</td>
+                <td>${esc(r.version)}</td>
+            </tr>`).join("");
+        }
+
+        function filterArtikeldaten() { renderArtikeldaten(); }
+
+        function sortArtikeldaten(col) {
+            if (artikeldatenSortCol === col) {
+                artikeldatenSortAsc = !artikeldatenSortAsc;
+            } else {
+                artikeldatenSortCol = col;
+                artikeldatenSortAsc = true;
+            }
+            renderArtikeldaten();
+        }
+
+        // ===================================================================
+        // ADRESSEN / KUNDEN / LIEFERANTEN (Airtable)
+        // ===================================================================
+        let adressenCache = null;
+        let adressenSortCol = "name";
+        let adressenSortAsc = true;
+
+        async function loadAdressenDaten() {
+            if (adressenCache) { renderAdressen(); return; }
+            document.getElementById("adressenLoading").style.display = "";
+            document.getElementById("adressenEmpty").style.display = "none";
+            document.getElementById("adressenBody").innerHTML = "";
+            try {
+                const res = await authFetch("/api/adressen");
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+                adressenCache = data.adressen || [];
+                renderAdressen();
+            } catch(e) {
+                document.getElementById("adressenLoading").textContent = "Fehler: " + e.message;
+            }
+        }
+
+        function renderAdressen() {
+            const search = (document.getElementById("adressenSearch").value || "").toLowerCase();
+            let rows = adressenCache || [];
+            if (search) {
+                rows = rows.filter(r =>
+                    (r.kunden_nr || "").toLowerCase().includes(search) ||
+                    (r.name || "").toLowerCase().includes(search) ||
+                    (r.anschrift_1 || "").toLowerCase().includes(search) ||
+                    (r.strasse || "").toLowerCase().includes(search) ||
+                    (r.plz || "").toLowerCase().includes(search) ||
+                    (r.ort || "").toLowerCase().includes(search) ||
+                    (r.email || "").toLowerCase().includes(search)
+                );
+            }
+            rows = [...rows].sort((a, b) => {
+                const va = (a[adressenSortCol] || "").toString().toLowerCase();
+                const vb = (b[adressenSortCol] || "").toString().toLowerCase();
+                return adressenSortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+            });
+
+            document.getElementById("adressenLoading").style.display = "none";
+            document.getElementById("adressenEmpty").style.display = rows.length ? "none" : "";
+            document.getElementById("adressenCount").textContent = `${rows.length} von ${(adressenCache||[]).length} Adressen`;
+
+            // Update sort arrows
+            document.querySelectorAll("#adressenTable th").forEach(th => {
+                const col = th.getAttribute("onclick")?.match(/sortAdressen\('(.+?)'\)/)?.[1];
+                const arrow = th.querySelector(".sort-arrow");
+                if (col === adressenSortCol) {
+                    th.classList.add("sorted");
+                    if (arrow) arrow.innerHTML = adressenSortAsc ? "&#9650;" : "&#9660;";
+                } else {
+                    th.classList.remove("sorted");
+                    if (arrow) arrow.innerHTML = "&#9650;";
+                }
+            });
+
+            // Limit to 200 rows for browser performance
+            const MAX_ROWS = 200;
+            const shown = rows.slice(0, MAX_ROWS);
+            if (rows.length > MAX_ROWS) {
+                document.getElementById("adressenCount").textContent =
+                    `Zeige ${MAX_ROWS} von ${rows.length} Treffern (${(adressenCache||[]).length} gesamt) – Suche verfeinern`;
+            }
+
+            const tbody = document.getElementById("adressenBody");
+            const esc = t => String(t == null ? "" : t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+            tbody.innerHTML = shown.map(r => `<tr>
+                <td>${esc(r.kunden_nr)}</td>
+                <td title="${esc(r.name)}">${esc(r.name)}</td>
+                <td title="${esc(r.anschrift_1)}${r.anschrift_2 ? ', '+esc(r.anschrift_2) : ''}">${esc(r.anschrift_1)}</td>
+                <td title="${esc(r.strasse)}">${esc(r.strasse)}</td>
+                <td>${esc(r.plz)}</td>
+                <td>${esc(r.ort)}</td>
+                <td>${esc(r.land)}</td>
+                <td>${esc(r.telefon)}</td>
+                <td>${r.email ? '<a href="mailto:'+esc(r.email)+'">'+esc(r.email)+'</a>' : ''}</td>
+            </tr>`).join("");
+        }
+
+        function filterAdressen() { renderAdressen(); }
+
+        function sortAdressen(col) {
+            if (adressenSortCol === col) {
+                adressenSortAsc = !adressenSortAsc;
+            } else {
+                adressenSortCol = col;
+                adressenSortAsc = true;
+            }
+            renderAdressen();
+        }
+
+        // ===================================================================
+        // LIVE-SUCHE KOMPONENTE (wiederverwendbar)
+        // ===================================================================
+        function initSearchBox(config) {
+            const { inputId, spinnerId, resultsId, selectedId, apiUrl, renderItem, renderSelected, onSelect, onClear } = config;
+            const input = document.getElementById(inputId);
+            const spinner = document.getElementById(spinnerId);
+            const resultsEl = document.getElementById(resultsId);
+            const selectedEl = document.getElementById(selectedId);
+            let debounceTimer = null;
+            let selectedData = null;
+
+            input.addEventListener("input", () => {
+                const q = input.value.trim();
+                if (q.length < 2) {
+                    resultsEl.classList.remove("open");
+                    resultsEl.innerHTML = "";
+                    return;
+                }
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(async () => {
+                    spinner.classList.add("active");
+                    try {
+                        const res = await authFetch(`${apiUrl}?q=${encodeURIComponent(q)}`);
+                        const data = await res.json();
+                        if (data.error) throw new Error(data.error);
+                        const items = data.artikel || data.adressen || [];
+                        if (items.length === 0) {
+                            resultsEl.innerHTML = '<div class="search-result-empty">Keine Ergebnisse</div>';
+                        } else {
+                            resultsEl.innerHTML = items.map((item, i) =>
+                                `<div class="search-result-item" data-idx="${i}">${renderItem(item)}</div>`
+                            ).join("");
+                            resultsEl.querySelectorAll(".search-result-item").forEach((el, i) => {
+                                el.addEventListener("click", () => {
+                                    selectedData = items[i];
+                                    input.style.display = "none";
+                                    resultsEl.classList.remove("open");
+                                    selectedEl.style.display = "";
+                                    selectedEl.innerHTML = renderSelected(items[i]) +
+                                        ' <button onclick="this.parentElement.querySelector(\'.search-clear\').click()">&times;</button>' +
+                                        `<button class="search-clear" style="display:none"></button>`;
+                                    selectedEl.querySelector(".search-clear").addEventListener("click", () => {
+                                        selectedData = null;
+                                        input.style.display = "";
+                                        input.value = "";
+                                        selectedEl.style.display = "none";
+                                        if (onClear) onClear();
+                                    });
+                                    if (onSelect) onSelect(items[i]);
+                                });
+                            });
+                        }
+                        resultsEl.classList.add("open");
+                    } catch(e) {
+                        resultsEl.innerHTML = `<div class="search-result-empty" style="color:#d32f2f">Fehler: ${e.message}</div>`;
+                        resultsEl.classList.add("open");
+                    } finally {
+                        spinner.classList.remove("active");
+                    }
+                }, 350);
+            });
+
+            // Close on outside click
+            document.addEventListener("click", (e) => {
+                if (!e.target.closest(`#${inputId}`) && !e.target.closest(`#${resultsId}`)) {
+                    resultsEl.classList.remove("open");
+                }
+            });
+
+            return {
+                getSelected: () => selectedData,
+                clear: () => {
+                    selectedData = null;
+                    input.style.display = "";
+                    input.value = "";
+                    selectedEl.style.display = "none";
+                    resultsEl.classList.remove("open");
+                    if (onClear) onClear();
+                }
+            };
+        }
+
+        // --- Artikel-Suche Renderer ---
+        function renderArtikelItem(a) {
+            return `<div class="result-title">${a.artikel_nr}</div>` +
+                   `<div class="result-sub">${a.bezeichnung || ''}${a.version ? ' (V'+a.version+')' : ''}</div>`;
+        }
+        function renderArtikelSelected(a) {
+            return `<span class="selected-text">${a.artikel_nr} <span class="selected-sub">– ${a.bezeichnung || ''}${a.version ? ' (V'+a.version+')' : ''}</span></span>`;
+        }
+
+        // --- Kunden/Lieferanten-Suche Renderer ---
+        function renderAdresseItem(a) {
+            return `<div class="result-title">${a.name}${a.kunden_nr ? ' ('+a.kunden_nr+')' : ''}</div>` +
+                   `<div class="result-sub">${[a.strasse, a.plz, a.ort].filter(Boolean).join(', ')}</div>`;
+        }
+        function renderAdresseSelected(a) {
+            return `<span class="selected-text">${a.name} <span class="selected-sub">${a.kunden_nr ? '('+a.kunden_nr+') ' : ''}${a.ort || ''}</span></span>`;
+        }
+
+        // ===================================================================
+        // FERTIGUNG: Neuer Auftrag mit Artikelsuche
+        // ===================================================================
+        let fertArtikelSearch, fertKundeSearch;
+
+        function initFertSearches() {
+            if (fertArtikelSearch) return; // already initialized
+            fertArtikelSearch = initSearchBox({
+                inputId: "fertArtikelSearchInput", spinnerId: "fertArtikelSpinner",
+                resultsId: "fertArtikelResults", selectedId: "fertArtikelSelected",
+                apiUrl: "/api/artikel-search",
+                renderItem: renderArtikelItem, renderSelected: renderArtikelSelected,
+            });
+            fertKundeSearch = initSearchBox({
+                inputId: "fertKundeSearchInput", spinnerId: "fertKundeSpinner",
+                resultsId: "fertKundeResults", selectedId: "fertKundeSelected",
+                apiUrl: "/api/adressen-search",
+                renderItem: renderAdresseItem, renderSelected: renderAdresseSelected,
+            });
+        }
+
+        async function fertCreateAuftrag() {
+            const artikel = fertArtikelSearch?.getSelected();
+            if (!artikel) { alert("Bitte zuerst einen Artikel suchen und auswählen."); return; }
+            const nr = document.getElementById("fertAuftragNrInput").value.trim();
+            if (!nr) { alert("Bitte eine Fertigungsauftragsnr. eingeben."); return; }
+
+            // Check if article exists in Supabase, if not create it
+            let artRow = artikelList.find(a => a.artikel_nr === artikel.artikel_nr &&
+                (!artikel.version || a.version === artikel.version));
+            // Fallback: match by artikel_nr only — prefer article with Stammdaten
+            if (!artRow) {
+                const candidates = artikelList.filter(a => a.artikel_nr === artikel.artikel_nr);
+                artRow = candidates.find(a => a.messplan_file || a.zeichnung_file) || candidates[0];
+            }
+            if (!artRow && sb) {
+                try {
+                    const { data, error } = await sb.from("artikel").insert({
+                        artikel_nr: artikel.artikel_nr,
+                        bezeichnung: artikel.bezeichnung || "",
+                        zeichnungs_nr: artikel.zeichnungs_nr || "",
+                        version: artikel.version || "",
+                    }).select().single();
+                    if (error && error.code === "23505") {
+                        // Already exists, fetch it
+                        const { data: existing } = await sb.from("artikel")
+                            .select("*")
+                            .eq("artikel_nr", artikel.artikel_nr)
+                            .limit(1).single();
+                        artRow = existing;
+                    } else if (error) {
+                        throw error;
+                    } else {
+                        artRow = data;
+                        await fetchArtikelList();
+                    }
+                } catch(e) { alert("Fehler beim Anlegen: " + e.message); return; }
+            }
+            if (!artRow) { alert("Artikel konnte nicht angelegt werden."); return; }
+
+            // Create Fertigungsauftrag
+            try {
+                const kunde = fertKundeSearch?.getSelected();
+                const { data, error } = await sb.from("fertigungsauftrag").insert({
+                    artikel_id: artRow.id,
+                    auftragsnummer: nr,
+                    status: "aktiv"
+                }).select().single();
+                if (error) {
+                    if (error.code === "23505") { alert("Auftragsnummer existiert bereits."); return; }
+                    throw error;
+                }
+                showSaveToast("Auftrag erstellt!");
+                await populateFertAuftragSelect();
+                document.getElementById("fertAuftragSelect").value = data.id;
+                await loadAuftrag(data.id);
+                // Clear search fields
+                fertArtikelSearch.clear();
+                fertKundeSearch.clear();
+                document.getElementById("fertAuftragNrInput").value = "";
+            } catch(e) { alert("Fehler: " + e.message); }
+        }
+
+        // ===================================================================
+        // WARENEINGANG: Artikelsuche + Kundensuche
+        // ===================================================================
+        let weArtikelSearch, weLieferantSearch;
+        let weSelectedArtikelData = null;
+        let weSelectedLieferantData = null;
+
+        function initWeSearches() {
+            if (weArtikelSearch) return;
+            weArtikelSearch = initSearchBox({
+                inputId: "weArtikelSearchInput", spinnerId: "weArtikelSpinner",
+                resultsId: "weArtikelResults", selectedId: "weArtikelSelected",
+                apiUrl: "/api/artikel-search",
+                renderItem: renderArtikelItem, renderSelected: renderArtikelSelected,
+                onSelect: (a) => { weSelectedArtikelData = a; },
+                onClear: () => { weSelectedArtikelData = null; },
+            });
+            weLieferantSearch = initSearchBox({
+                inputId: "weLieferantSearchInput", spinnerId: "weLieferantSpinner",
+                resultsId: "weLieferantResults", selectedId: "weLieferantSelected",
+                apiUrl: "/api/adressen-search",
+                renderItem: renderAdresseItem, renderSelected: renderAdresseSelected,
+                onSelect: (a) => { weSelectedLieferantData = a; },
+                onClear: () => { weSelectedLieferantData = null; },
+            });
         }
 
         // Set initial state
@@ -4329,15 +5176,52 @@
         }
 
         async function weCreatePruefauftrag() {
-            const sel = document.getElementById("weArtikelSelect");
-            if (!sel.value) { alert("Bitte zuerst einen Artikel wählen."); return; }
-            const art = artikelList.find(a => a.id === parseInt(sel.value));
-            if (!art) return;
+            // Try new search-based selection first, fallback to old dropdowns
+            const searchArtikel = weArtikelSearch?.getSelected();
+            const searchLieferant = weLieferantSearch?.getSelected();
 
-            const lieferant = document.getElementById("weLieferantSelect").value;
+            let art = null;
+            let lieferant = "";
             const lieferscheinNr = document.getElementById("weLieferscheinNr").value.trim();
 
-            if (!lieferant) { alert("Bitte einen Lieferanten wählen."); return; }
+            if (searchArtikel) {
+                // Find or create article in Supabase
+                art = artikelList.find(a => a.artikel_nr === searchArtikel.artikel_nr &&
+                    (!searchArtikel.version || a.version === searchArtikel.version));
+                // Fallback: match by artikel_nr only — prefer article with Stammdaten
+                if (!art) {
+                    const candidates = artikelList.filter(a => a.artikel_nr === searchArtikel.artikel_nr);
+                    art = candidates.find(a => a.messplan_file || a.zeichnung_file) || candidates[0];
+                }
+                if (!art && sb) {
+                    try {
+                        const { data, error } = await sb.from("artikel").insert({
+                            artikel_nr: searchArtikel.artikel_nr,
+                            bezeichnung: searchArtikel.bezeichnung || "",
+                            zeichnungs_nr: searchArtikel.zeichnungs_nr || "",
+                            version: searchArtikel.version || "",
+                        }).select().single();
+                        if (error && error.code === "23505") {
+                            const { data: ex } = await sb.from("artikel")
+                                .select("*").eq("artikel_nr", searchArtikel.artikel_nr).limit(1).single();
+                            art = ex;
+                        } else if (error) { throw error; }
+                        else { art = data; await fetchArtikelList(); }
+                    } catch(e) { alert("Fehler: " + e.message); return; }
+                }
+            } else {
+                // Fallback: old dropdown
+                const sel = document.getElementById("weArtikelSelect");
+                if (sel.value) art = artikelList.find(a => a.id === parseInt(sel.value));
+            }
+            if (!art) { alert("Bitte zuerst einen Artikel suchen und auswählen."); return; }
+
+            if (searchLieferant) {
+                lieferant = searchLieferant.name;
+            } else {
+                lieferant = document.getElementById("weLieferantSelect").value;
+            }
+            if (!lieferant) { alert("Bitte einen Kunden/Lieferanten suchen und auswählen."); return; }
 
             // Generate unique Prüfauftrag number
             const paNr = weGeneratePruefauftragNr();
@@ -4456,12 +5340,25 @@
         async function weLoadPruefpunkte() {
             if (!sb || !weCurrentArtikelId) return;
             try {
-                const { data, error } = await sb
+                let { data, error } = await sb
                     .from("we_pruefpunkte")
                     .select("*")
                     .eq("artikel_id", weCurrentArtikelId)
                     .order("sort_order");
                 if (error) throw error;
+                // Fallback: if no Prüfpunkte found, try sibling article with same artikel_nr
+                if ((!data || data.length === 0)) {
+                    const currentArt = artikelList.find(a => a.id === weCurrentArtikelId);
+                    if (currentArt) {
+                        const sibling = artikelList.find(a =>
+                            a.artikel_nr === currentArt.artikel_nr && a.id !== currentArt.id);
+                        if (sibling) {
+                            const { data: sibData } = await sb.from("we_pruefpunkte")
+                                .select("*").eq("artikel_id", sibling.id).order("sort_order");
+                            if (sibData && sibData.length > 0) data = sibData;
+                        }
+                    }
+                }
                 wePruefpunkte = (data || []).map(d => ({
                     id: d.id,
                     nr: d.nummer,
@@ -5708,7 +6605,14 @@
             <div class="review-drawing-toolbar">
                 <span class="review-title">Zeichnung</span>
                 <span class="review-hint" id="reviewHint"></span>
-                <button class="review-close-btn" onclick="closeDrawingReview()">Schließen</button>
+                <div class="review-zoom-controls" style="margin-left:auto">
+                    <button onclick="reviewZoom(-1)" title="Rauszoomen">&#x2212;</button>
+                    <span id="reviewZoomLevel">100%</span>
+                    <button onclick="reviewZoom(1)" title="Reinzoomen">+</button>
+                </div>
+                <button class="primary" onclick="rerunAutoDetection()" id="reviewAutoDetectBtn" style="margin-right:8px;padding:6px 16px;font-size:0.85rem">&#x21bb; Auto-Erkennung</button>
+                <button class="review-close-btn" onclick="deleteAllMarkers()" style="margin-right:4px;color:var(--danger);border-color:var(--danger)">Alle entfernen</button>
+                <button class="review-close-btn" onclick="closeDrawingReview()">Schlie&szlig;en</button>
             </div>
             <div class="review-drawing-container">
                 <div class="review-drawing-inner" id="reviewDrawingInner">

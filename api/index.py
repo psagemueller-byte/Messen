@@ -28,9 +28,9 @@ app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB
 
 # --- Authentication ---
-APP_USER = os.environ.get("APP_USER", "admin")
-APP_PASS = os.environ.get("APP_PASS", "QS2026!")
-APP_SECRET = os.environ.get("APP_SECRET", "qs-messen-secret-key-change-me")
+APP_USER = os.environ.get("APP_USER", "admin").strip()
+APP_PASS = os.environ.get("APP_PASS", "QS2026!").strip()
+APP_SECRET = os.environ.get("APP_SECRET", "qs-messen-secret-key-change-me").strip()
 
 def _make_token(username):
     """Create a simple HMAC token."""
@@ -68,7 +68,7 @@ def require_auth(f):
 @app.route("/api/login", methods=["POST"])
 def login():
     data = request.get_json(silent=True) or {}
-    username = data.get("username", "")
+    username = data.get("username", "").strip()
     password = data.get("password", "")
     if username == APP_USER and password == APP_PASS:
         token = _make_token(username)
@@ -324,10 +324,18 @@ def upload_drawing():
     if not file.filename.lower().endswith(".pdf"):
         return jsonify({"error": "Nur PDF-Dateien werden unterstützt"}), 400
 
+    expected_positions = None
+    ep_raw = request.form.get("expected_positions")
+    if ep_raw:
+        try:
+            expected_positions = json.loads(ep_raw)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
         file.save(tmp.name)
         try:
-            result = extract_drawing_markers(tmp.name)
+            result = extract_drawing_markers(tmp.name, expected_positions)
             return jsonify(result)
         except Exception as e:
             return jsonify({"error": f"Fehler: {str(e)}"}), 500
@@ -335,38 +343,49 @@ def upload_drawing():
             os.unlink(tmp.name)
 
 
-def extract_drawing_markers(filepath):
+def extract_drawing_markers(filepath, expected_positions=None):
     """Extract red marker pins from a technical drawing PDF.
 
-    Technical drawings often embed the actual drawing as a raster image with
-    red pin-shaped markers (circle head + pointer tail) overlaid.  This
-    function extracts the embedded image, uses OpenCV to find the red regions,
-    isolates each circle head, and reads the position number via OCR.
-
-    Falls back to PyMuPDF vector/text analysis when no embedded images exist.
+    Uses a two-pass approach:
+    1. Vector detection (highest confidence) — reads PDF text & paths directly
+    2. Raster detection on rendered pixmap (fills gaps) — OpenCV circle detection
+       with PDF text cross-reference and constrained template OCR fallback
     """
     doc = fitz.open(filepath)
     page = doc[0]
     pw = page.rect.width
     ph = page.rect.height
 
-    # Check for embedded raster image that covers the page
-    img_list = page.get_images(full=True)
-    has_fullpage_image = False
-    if img_list:
-        blocks = page.get_text("dict").get("blocks", [])
-        for block in blocks:
-            if block.get("type") == 1:  # image block
-                bbox = block.get("bbox", [0, 0, 0, 0])
-                coverage = ((bbox[2] - bbox[0]) * (bbox[3] - bbox[1])) / (pw * ph)
-                if coverage > 0.5:
-                    has_fullpage_image = True
-                    break
+    markers_by_pos = {}
+    ep_set = set(str(p) for p in expected_positions) if expected_positions else None
+    debug = {"vector_found": [], "raster_found": [], "raster_rejected": []}
 
-    if has_fullpage_image:
-        markers = _extract_markers_raster(doc, page)
-    else:
-        markers = _extract_markers_vector(doc, page, pw, ph)
+    # 1. Vector detection FIRST (highest confidence — exact PDF text data)
+    for m in _extract_markers_vector(doc, page, pw, ph):
+        if m["pos_nr"] and m["pos_nr"] != "?":
+            markers_by_pos[m["pos_nr"]] = m
+            debug["vector_found"].append(m["pos_nr"])
+
+    # 2. Determine which positions are still missing
+    remaining = None
+    if ep_set:
+        remaining = [p for p in ep_set if p not in markers_by_pos]
+
+    # 3. Raster detection on rendered pixmap (fills gaps only)
+    for m in _extract_markers_raster(page, pw, ph,
+                                     expected_positions=remaining):
+        pos = m["pos_nr"]
+        if not pos or pos == "?":
+            continue
+        # Only accept raster results that match expected positions
+        if ep_set and pos not in ep_set:
+            debug["raster_rejected"].append(pos)
+            continue
+        if pos not in markers_by_pos:
+            markers_by_pos[pos] = m
+            debug["raster_found"].append(pos)
+
+    markers = list(markers_by_pos.values())
 
     # Render page as PNG for frontend display
     mat = fitz.Matrix(150 / 72, 150 / 72)
@@ -387,44 +406,189 @@ def extract_drawing_markers(filepath):
         "page_width": pw,
         "page_height": ph,
         "matched_markers": len(sorted_markers),
+        "debug": debug,
     }
 
 
-def _extract_markers_raster(doc, page):
-    """Extract markers from embedded raster image using OpenCV + OCR."""
-    xref = page.get_images(full=True)[0][0]
-    pix = fitz.Pixmap(doc, xref)
-    img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, 3)
+def _extract_markers_raster(page, pw, ph, expected_positions=None):
+    """Extract markers by rendering the page and detecting red circles.
+
+    Renders the page at 300 DPI (same coordinate space as the frontend
+    display image) so that normalized coordinates align perfectly.
+
+    Number assignment strategy:
+    1. Cross-reference detected circles with PDF text data (most reliable)
+    2. Fallback: constrained template matching against expected_positions
+    """
+    # Render the page at 300 DPI for detection
+    det_mat = fitz.Matrix(300 / 72, 300 / 72)
+    pix = page.get_pixmap(matrix=det_mat)
+    img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(
+        pix.height, pix.width, pix.n)
+    # Handle RGBA pixmaps (drop alpha channel)
+    if pix.n == 4:
+        img = img[:, :, :3]
     img_h, img_w = img.shape[:2]
 
-    # Find red regions in HSV color space
+    # --- Red circle detection ---
     hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
-    mask1 = cv2.inRange(hsv, np.array([0, 80, 80]), np.array([10, 255, 255]))
-    mask2 = cv2.inRange(hsv, np.array([170, 80, 80]), np.array([180, 255, 255]))
+    mask1 = cv2.inRange(hsv, np.array([0, 50, 50]), np.array([10, 255, 255]))
+    mask2 = cv2.inRange(hsv, np.array([170, 50, 50]),
+                        np.array([180, 255, 255]))
     red_mask = mask1 | mask2
 
-    contours, _ = cv2.findContours(red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+    red_mask = cv2.morphologyEx(red_mask, cv2.MORPH_CLOSE, kernel_close)
+    kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    red_mask = cv2.morphologyEx(red_mask, cv2.MORPH_OPEN, kernel_open)
+
+    contours, _ = cv2.findContours(
+        red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     raw_markers = []
     for c in contours:
         area = cv2.contourArea(c)
-        if area < 100:
+        if area < 50:
             continue
+        perimeter = cv2.arcLength(c, True)
+        if perimeter == 0:
+            continue
+        circularity = 4 * math.pi * area / (perimeter * perimeter)
         x, y, w, h = cv2.boundingRect(c)
-        hull = cv2.convexHull(c)
-        raw_markers.append({"x": x, "y": y, "w": w, "h": h, "hull": hull})
+        aspect_ratio = min(w, h) / max(w, h)
+        if circularity > 0.5 and aspect_ratio > 0.6:
+            (mcx, mcy), mradius = cv2.minEnclosingCircle(c)
+            raw_markers.append({
+                "x": x, "y": y, "w": w, "h": h,
+                "hull": cv2.convexHull(c),
+                "center": (int(mcx), int(mcy)),
+                "radius": int(mradius),
+            })
 
-    # Read the number inside each marker's circle head
+    # Complementary: HoughCircles
+    min_r = max(8, img_h // 200)
+    max_r = max(20, img_h // 30)
+    circles = cv2.HoughCircles(
+        red_mask, cv2.HOUGH_GRADIENT, dp=1.2,
+        minDist=max(30, img_h // 100),
+        param1=50, param2=30,
+        minRadius=min_r, maxRadius=max_r,
+    )
+    if circles is not None:
+        for (hx, hy, hr) in np.round(circles[0]).astype(int):
+            already_found = any(
+                math.sqrt((hx - m["center"][0])**2
+                          + (hy - m["center"][1])**2)
+                < m["radius"] * 1.5
+                for m in raw_markers
+            )
+            if not already_found:
+                raw_markers.append({
+                    "x": max(0, hx - hr), "y": max(0, hy - hr),
+                    "w": 2 * hr, "h": 2 * hr,
+                    "hull": None,
+                    "center": (hx, hy),
+                    "radius": hr,
+                })
+
+    # --- Number assignment via PDF text cross-reference ---
+    # Only use RED-colored text (position numbers) — NOT black dimension text
+    text_dict = page.get_text("dict")
+    all_numbers = []
+    for block in text_dict.get("blocks", []):
+        if block.get("type") != 0:
+            continue
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                raw = span.get("text", "").strip()
+                clean = raw.replace(".", "").replace(",", "").strip()
+                if not re.match(r"^\d{1,3}$", clean):
+                    continue
+                # Check text color — only accept red text
+                color_int = span.get("color", 0)
+                sr = ((color_int >> 16) & 0xFF) / 255.0
+                sg = ((color_int >> 8) & 0xFF) / 255.0
+                sb_c = (color_int & 0xFF) / 255.0
+                is_red = sr > 0.5 and sg < 0.4 and sb_c < 0.4
+                if not is_red:
+                    continue
+                bbox = span.get("bbox", [0, 0, 0, 0])
+                tcx = (bbox[0] + bbox[2]) / 2 / pw
+                tcy = (bbox[1] + bbox[3]) / 2 / ph
+                num = clean.lstrip("0") or "0"
+                all_numbers.append({"num": num, "x": tcx, "y": tcy})
+
+    # Also collect ALL text numbers (any color) as secondary source
+    all_text_numbers = []
+    for block in text_dict.get("blocks", []):
+        if block.get("type") != 0:
+            continue
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                raw = span.get("text", "").strip()
+                # Only clean integers — no decimals stripped
+                if not re.match(r"^\d{1,3}$", raw):
+                    continue
+                bbox = span.get("bbox", [0, 0, 0, 0])
+                tcx = (bbox[0] + bbox[2]) / 2 / pw
+                tcy = (bbox[1] + bbox[3]) / 2 / ph
+                num = raw.lstrip("0") or "0"
+                # Only include if it's a plausible position number
+                if expected_positions and num not in [
+                        str(p) for p in expected_positions]:
+                    continue
+                all_text_numbers.append(
+                    {"num": num, "x": tcx, "y": tcy})
+
     markers = []
+    used_texts = set()
+    used_secondary = set()
     for m in raw_markers:
-        interior_gray = _extract_marker_interior(img, red_mask, m, img_w, img_h)
-        pos_nr = _recognize_number(interior_gray)
-        cx = m["x"] + m["w"] // 2
-        cy = m["y"] + m["h"] // 2
+        cx, cy = m["center"]
+        cx_n = cx / img_w
+        cy_n = cy / img_h
+
+        # 1st: Try to find matching RED text number near this circle
+        pos_nr = ""
+        best_dist = float("inf")
+        best_idx = -1
+        for idx, t in enumerate(all_numbers):
+            if idx in used_texts:
+                continue
+            dist = math.sqrt((cx_n - t["x"])**2 + (cy_n - t["y"])**2)
+            if dist < 0.04 and dist < best_dist:
+                best_dist = dist
+                best_idx = idx
+                pos_nr = t["num"]
+
+        if best_idx >= 0:
+            used_texts.add(best_idx)
+        else:
+            # 2nd: Try non-red text but ONLY expected position numbers
+            best_dist2 = float("inf")
+            best_idx2 = -1
+            for idx, t in enumerate(all_text_numbers):
+                if idx in used_secondary:
+                    continue
+                dist = math.sqrt(
+                    (cx_n - t["x"])**2 + (cy_n - t["y"])**2)
+                if dist < 0.025 and dist < best_dist2:
+                    best_dist2 = dist
+                    best_idx2 = idx
+                    pos_nr = t["num"]
+            if best_idx2 >= 0:
+                used_secondary.add(best_idx2)
+            else:
+                # 3rd: Fallback — constrained template matching
+                interior = _extract_marker_interior(
+                    img, red_mask, m, img_w, img_h)
+                pos_nr = _recognize_number(
+                    interior, candidates=expected_positions)
+
         markers.append({
             "pos_nr": pos_nr or "?",
-            "x": cx / img_w,
-            "y": cy / img_h,
+            "x": cx_n,
+            "y": cy_n,
         })
 
     return markers
@@ -433,10 +597,33 @@ def _extract_markers_raster(doc, page):
 def _extract_marker_interior(img, red_mask, m, img_w, img_h):
     """Extract the white circle-head interior as a grayscale crop.
 
-    Fills the convex hull of the marker, subtracts red pixels, finds the
-    largest remaining blob (the white circle head), and returns only that
-    area with everything else masked to white.
+    When circle center and radius are known, uses a circular mask directly.
+    Falls back to convex hull approach otherwise.
     """
+    # Preferred: circle-based extraction using known center/radius
+    if m.get("center") and m.get("radius"):
+        cx, cy = m["center"]
+        r = m["radius"]
+        inner_r = int(r * 0.75)  # exclude outer red ring
+        if inner_r < 3:
+            return None
+
+        x1, y1 = max(0, cx - inner_r), max(0, cy - inner_r)
+        x2, y2 = min(img_w, cx + inner_r), min(img_h, cy + inner_r)
+        crop = img[y1:y2, x1:x2].copy()
+        ch, cw = crop.shape[:2]
+        if ch < 5 or cw < 5:
+            return None
+
+        circ_mask = np.zeros((ch, cw), dtype=np.uint8)
+        local_cx, local_cy = cx - x1, cy - y1
+        cv2.circle(circ_mask, (local_cx, local_cy), inner_r, 255, -1)
+
+        gray = cv2.cvtColor(crop, cv2.COLOR_RGB2GRAY)
+        gray[circ_mask == 0] = 255
+        return gray
+
+    # Fallback: convex hull approach
     x, y, w, h = m["x"], m["y"], m["w"], m["h"]
     pad = 5
     x1, y1 = max(0, x - pad), max(0, y - pad)
@@ -447,6 +634,8 @@ def _extract_marker_interior(img, red_mask, m, img_w, img_h):
     ch, cw = crop.shape[:2]
 
     hull_mask = np.zeros((ch, cw), dtype=np.uint8)
+    if m.get("hull") is None:
+        return None
     shifted_hull = m["hull"] - np.array([x1, y1])
     cv2.fillConvexPoly(hull_mask, shifted_hull, 255)
 
@@ -467,12 +656,12 @@ def _extract_marker_interior(img, red_mask, m, img_w, img_h):
     return gray[iy:iy + ih, ix:ix + iw]
 
 
-def _recognize_number(interior_gray, max_num=50):
-    """Recognize a position number using OpenCV template matching.
+def _recognize_number(interior_gray, candidates=None, max_num=99):
+    """Recognize a position number using template matching.
 
-    Renders each candidate number (1..max_num) with cv2.putText, resizes it
-    to match the text crop dimensions, and picks the best match via
-    normalized cross-correlation.  No external OCR binary needed.
+    When candidates is provided, matches only against those specific numbers
+    as whole-number templates (much more accurate than digit-by-digit).
+    Falls back to digit-by-digit matching when no candidates given.
     """
     if interior_gray is None:
         return ""
@@ -481,7 +670,20 @@ def _recognize_number(interior_gray, max_num=50):
     best_result = ""
     best_score = -1
 
-    for thresh_val in [140, 160, 180]:
+    # Determine which numbers to try
+    if candidates:
+        nums_to_try = []
+        for c in candidates:
+            c_str = str(c).strip()
+            if c_str.isdigit():
+                nums_to_try.append(int(c_str))
+    else:
+        nums_to_try = list(range(1, max_num + 1))
+
+    if not nums_to_try:
+        return ""
+
+    for thresh_val in [120, 140, 160, 180, 200]:
         _, binary = cv2.threshold(interior_gray, thresh_val, 255,
                                   cv2.THRESH_BINARY)
         text_coords = np.where(binary < 128)
@@ -495,29 +697,29 @@ def _recognize_number(interior_gray, max_num=50):
         if th < 3 or tw < 3:
             continue
 
-        for num in range(1, max_num + 1):
+        # Match whole numbers as templates (not digit-by-digit)
+        for num in nums_to_try:
             text = str(num)
-            for scale in [0.8, 1.0, 1.2]:
+            for scale in [0.5, 0.7, 0.9, 1.1, 1.4]:
                 (rtw, rth), _ = cv2.getTextSize(text, font, scale, 2)
-                canvas = np.ones((rth + 10, rtw + 10), dtype=np.uint8) * 255
-                cv2.putText(canvas, text, (5, rth + 5), font, scale, 0, 2,
-                            cv2.LINE_AA)
-
+                canvas = np.ones((rth + 10, rtw + 10),
+                                 dtype=np.uint8) * 255
+                cv2.putText(canvas, text, (5, rth + 5), font, scale,
+                            0, 2, cv2.LINE_AA)
                 rc = np.where(canvas < 128)
                 if len(rc[0]) == 0:
                     continue
                 rendered = canvas[rc[0].min():rc[0].max() + 1,
                                   rc[1].min():rc[1].max() + 1]
-
                 resized = cv2.resize(rendered, (tw, th),
                                      interpolation=cv2.INTER_AREA)
-                score = cv2.matchTemplate(text_crop, resized,
-                                          cv2.TM_CCOEFF_NORMED)
+                score = cv2.matchTemplate(
+                    text_crop, resized, cv2.TM_CCOEFF_NORMED)
                 if score.size > 0 and score.max() > best_score:
                     best_score = score.max()
                     best_result = text
 
-    return best_result if best_score > 0.3 else ""
+    return best_result if best_score > 0.35 else ""
 
 
 def _extract_markers_vector(doc, page, pw, ph):
@@ -543,9 +745,10 @@ def _extract_markers_vector(doc, page, pw, ph):
                 sr = ((color_int >> 16) & 0xFF) / 255.0
                 sg = ((color_int >> 8) & 0xFF) / 255.0
                 sb = (color_int & 0xFF) / 255.0
-                is_red = sr > 0.6 and sg < 0.35 and sb < 0.35
+                is_red = sr > 0.5 and sg < 0.4 and sb < 0.4
 
-                all_texts.append({"text": text, "cx": tcx, "cy": tcy})
+                all_texts.append({"text": text, "cx": tcx, "cy": tcy,
+                                  "is_red": is_red})
 
                 clean = text.replace(".", "").replace(",", "").strip()
                 if is_red and re.match(r"^\d{1,3}$", clean):
@@ -557,15 +760,15 @@ def _extract_markers_vector(doc, page, pw, ph):
     for drawing in page.get_drawings():
         sc = drawing.get("color") or []
         fc = drawing.get("fill") or []
-        sc_red = len(sc) >= 3 and sc[0] > 0.6 and sc[1] < 0.35 and sc[2] < 0.35
-        fc_red = len(fc) >= 3 and fc[0] > 0.6 and fc[1] < 0.35 and fc[2] < 0.35
+        sc_red = len(sc) >= 3 and sc[0] > 0.5 and sc[1] < 0.4 and sc[2] < 0.4
+        fc_red = len(fc) >= 3 and fc[0] > 0.5 and fc[1] < 0.4 and fc[2] < 0.4
         if not sc_red and not fc_red:
             continue
         rect = drawing.get("rect")
         if not rect:
             continue
         r = fitz.Rect(rect)
-        if r.width < 2 or r.height < 2 or r.width > pw * 0.08:
+        if r.width < 1 or r.height < 1 or r.width > pw * 0.08:
             continue
         items = drawing.get("items", [])
         if not any(it[0] == "c" for it in items):
@@ -574,14 +777,26 @@ def _extract_markers_vector(doc, page, pw, ph):
         radius = max(r.width, r.height) / 2
 
         best, best_dist = None, float("inf")
-        for tb in all_texts:
-            clean = tb["text"].replace(".", "").replace(",", "").strip()
-            if not re.match(r"^\d{1,3}$", clean):
-                continue
-            dist = math.sqrt((cx - tb["cx"]) ** 2 + (cy - tb["cy"]) ** 2)
-            if dist < radius * 3.5 and dist < best_dist:
-                best_dist = dist
-                best = clean.lstrip("0") or "0"
+        # Prefer red-colored text; only use non-red as last resort
+        for prefer_red in [True, False]:
+            if best is not None:
+                break
+            for tb in all_texts:
+                if prefer_red and not tb.get("is_red"):
+                    continue
+                if not prefer_red and tb.get("is_red"):
+                    continue  # already tried
+                clean = tb["text"].replace(".", "").replace(",", "").strip()
+                if not re.match(r"^\d{1,3}$", clean):
+                    continue
+                dist = math.sqrt(
+                    (cx - tb["cx"]) ** 2 + (cy - tb["cy"]) ** 2)
+                max_dist = max(radius * 3.0, 15.0)
+                if not prefer_red:
+                    max_dist = min(max_dist, radius * 1.5)
+                if dist < max_dist and dist < best_dist:
+                    best_dist = dist
+                    best = clean.lstrip("0") or "0"
         if best and best not in markers:
             markers[best] = {"x": cx / pw, "y": cy / ph}
 
@@ -638,7 +853,7 @@ def get_lieferanten():
 
 
 # --- PIN verification endpoint ---
-STAMMDATEN_PIN = os.environ.get("STAMMDATEN_PIN", "1234")
+STAMMDATEN_PIN = os.environ.get("STAMMDATEN_PIN", "1234").strip()
 
 
 @app.route("/api/verify-pin", methods=["POST"])
@@ -648,7 +863,7 @@ def verify_pin():
     pin = str(data.get("pin", ""))
     if pin == STAMMDATEN_PIN:
         return jsonify({"ok": True})
-    return jsonify({"ok": False, "error": "Falscher PIN"}), 401
+    return jsonify({"ok": False, "error": "Falscher PIN"}), 403
 
 
 # --- Artikel-Import aus CSV ---
@@ -841,23 +1056,50 @@ def _airtable_fetch_all(table_id, fields=None):
     return records
 
 
+def _airtable_search(table_id, formula, fields=None, max_records=50):
+    """Search Airtable with filterByFormula. Returns up to max_records."""
+    import urllib.request
+    import urllib.parse
+
+    if not AIRTABLE_PAT:
+        return []
+
+    params = {
+        "filterByFormula": formula,
+        "maxRecords": str(max_records),
+    }
+    if fields:
+        for f in fields:
+            params.setdefault("fields[]", []).append(f)
+    qs = urllib.parse.urlencode(params, doseq=True)
+    url = f"https://api.airtable.com/v0/{AIRTABLE_BASE}/{table_id}?{qs}"
+    req = urllib.request.Request(url, headers={
+        "Authorization": f"Bearer {AIRTABLE_PAT}"
+    })
+    with urllib.request.urlopen(req) as resp:
+        data = json.loads(resp.read().decode())
+    return data.get("records", [])
+
+
 @app.route("/api/artikel-stamm", methods=["GET"])
 @require_auth
 def get_artikel_stamm():
     """Fetch article master data from Airtable."""
+    if not AIRTABLE_PAT:
+        return jsonify({"error": "Airtable API Token (AIRTABLE_PAT) nicht konfiguriert"}), 500
     try:
         records = _airtable_fetch_all(AIRTABLE_ARTIKEL_TABLE)
         artikel = []
         for rec in records:
             f = rec.get("fields", {})
             artikel.append({
-                "artikel_nr": f.get("artikel_nr", ""),
-                "bezeichnung": f.get("bezeichnung", ""),
-                "kurzbezeichnung": f.get("Kurzbezeichnung", ""),
-                "gewicht": f.get("gewicht", ""),
-                "bestellnummer": f.get("bestellnummer", ""),
-                "zeichnungs_nr": f.get("zeichnungs_nr", ""),
-                "version": f.get("version", ""),
+                "artikel_nr": str(f.get("artikel_nr", "")),
+                "bezeichnung": str(f.get("bezeichnung", "")),
+                "kurzbezeichnung": str(f.get("Kurzbezeichnung", "")),
+                "gewicht": str(f.get("gewicht", "")),
+                "bestellnummer": str(f.get("bestellnummer", "")),
+                "zeichnungs_nr": str(f.get("zeichnungs_nr", "")),
+                "version": str(f.get("version", "")),
             })
         artikel.sort(key=lambda x: x["artikel_nr"])
         return jsonify({"artikel": artikel, "total": len(artikel)})
@@ -869,24 +1111,132 @@ def get_artikel_stamm():
 @require_auth
 def get_adressen():
     """Fetch addresses (customers/suppliers) from Airtable."""
+    if not AIRTABLE_PAT:
+        return jsonify({"error": "Airtable API Token (AIRTABLE_PAT) nicht konfiguriert"}), 500
     try:
         records = _airtable_fetch_all(AIRTABLE_ADRESSEN_TABLE)
         adressen = []
         for rec in records:
             f = rec.get("fields", {})
             adressen.append({
-                "kunden_nr": f.get("kunden_nr", ""),
-                "name": f.get("name", ""),
-                "anschrift_1": f.get("anschrift_1", ""),
-                "anschrift_2": f.get("anschrift_2", ""),
-                "strasse": f.get("strasse", ""),
-                "plz": f.get("plz", ""),
-                "ort": f.get("ort", ""),
-                "land": f.get("land", ""),
-                "telefon": f.get("telefon", ""),
-                "email": f.get("email", ""),
-                "zahlungsbedingung": f.get("zahlungsbedingung", ""),
-                "versandbedingung": f.get("versandbedingung", ""),
+                "kunden_nr": str(f.get("kunden_nr", "")),
+                "name": str(f.get("name", "")),
+                "anschrift_1": str(f.get("anschrift_1", "")),
+                "anschrift_2": str(f.get("anschrift_2", "")),
+                "strasse": str(f.get("strasse", "")),
+                "plz": str(f.get("plz", "")),
+                "ort": str(f.get("ort", "")),
+                "land": str(f.get("land", "")),
+                "telefon": str(f.get("telefon", "")),
+                "email": str(f.get("email", "")),
+                "zahlungsbedingung": str(f.get("zahlungsbedingung", "")),
+                "versandbedingung": str(f.get("versandbedingung", "")),
+            })
+        adressen.sort(key=lambda x: x["name"])
+        return jsonify({"adressen": adressen, "total": len(adressen)})
+    except Exception as e:
+        return jsonify({"error": f"Airtable Fehler: {str(e)}"}), 500
+
+
+@app.route("/api/artikel-search", methods=["GET"])
+@require_auth
+def artikel_search():
+    """Search articles in Airtable by query string (min 2 chars).
+
+    Uses FIND() on artikel_nr and bezeichnung for fast server-side search.
+    Returns max 50 results.
+    """
+    if not AIRTABLE_PAT:
+        return jsonify({"error": "Airtable API Token nicht konfiguriert"}), 500
+
+    q = request.args.get("q", "").strip()
+    if len(q) < 2:
+        return jsonify({"artikel": [], "total": 0})
+
+    # Escape single quotes for Airtable formula; use SUBSTITUTE+FIND
+    # with explicit string conversion to handle number fields safely
+    safe_q = q.replace("'", "\\'").upper()
+    # Use REGEX for robust matching (works with text and number fields)
+    formula = (
+        f"OR("
+        f"FIND('{safe_q}', UPPER(CONCATENATE({{artikel_nr}}))),"
+        f"FIND('{safe_q}', UPPER(CONCATENATE({{bezeichnung}})))"
+        f")"
+    )
+
+    try:
+        records = _airtable_search(
+            AIRTABLE_ARTIKEL_TABLE, formula,
+            fields=["artikel_nr", "bezeichnung", "Kurzbezeichnung",
+                     "gewicht", "bestellnummer", "zeichnungs_nr", "version"],
+            max_records=50
+        )
+        artikel = []
+        for rec in records:
+            f = rec.get("fields", {})
+            artikel.append({
+                "artikel_nr": str(f.get("artikel_nr", "")),
+                "bezeichnung": str(f.get("bezeichnung", "")),
+                "kurzbezeichnung": str(f.get("Kurzbezeichnung", "")),
+                "gewicht": str(f.get("gewicht", "")),
+                "bestellnummer": str(f.get("bestellnummer", "")),
+                "zeichnungs_nr": str(f.get("zeichnungs_nr", "")),
+                "version": str(f.get("version", "")),
+            })
+        artikel.sort(key=lambda x: x["artikel_nr"])
+        return jsonify({"artikel": artikel, "total": len(artikel)})
+    except Exception as e:
+        return jsonify({"error": f"Airtable Fehler: {str(e)}"}), 500
+
+
+@app.route("/api/adressen-search", methods=["GET"])
+@require_auth
+def adressen_search():
+    """Search addresses in Airtable by query string (min 2 chars).
+
+    Searches across name, kunden_nr, ort fields.
+    Returns max 50 results.
+    """
+    if not AIRTABLE_PAT:
+        return jsonify({"error": "Airtable API Token nicht konfiguriert"}), 500
+
+    q = request.args.get("q", "").strip()
+    if len(q) < 2:
+        return jsonify({"adressen": [], "total": 0})
+
+    safe_q = q.replace("'", "\\'").upper()
+    formula = (
+        f"OR("
+        f"FIND('{safe_q}', UPPER(CONCATENATE({{name}}))),"
+        f"FIND('{safe_q}', UPPER(CONCATENATE({{kunden_nr}}))),"
+        f"FIND('{safe_q}', UPPER(CONCATENATE({{ort}})))"
+        f")"
+    )
+
+    try:
+        records = _airtable_search(
+            AIRTABLE_ADRESSEN_TABLE, formula,
+            fields=["kunden_nr", "name", "anschrift_1", "anschrift_2",
+                     "strasse", "plz", "ort", "land", "telefon", "email",
+                     "zahlungsbedingung", "versandbedingung"],
+            max_records=50
+        )
+        adressen = []
+        for rec in records:
+            f = rec.get("fields", {})
+            adressen.append({
+                "kunden_nr": str(f.get("kunden_nr", "")),
+                "name": str(f.get("name", "")),
+                "anschrift_1": str(f.get("anschrift_1", "")),
+                "anschrift_2": str(f.get("anschrift_2", "")),
+                "strasse": str(f.get("strasse", "")),
+                "plz": str(f.get("plz", "")),
+                "ort": str(f.get("ort", "")),
+                "land": str(f.get("land", "")),
+                "telefon": str(f.get("telefon", "")),
+                "email": str(f.get("email", "")),
+                "zahlungsbedingung": str(f.get("zahlungsbedingung", "")),
+                "versandbedingung": str(f.get("versandbedingung", "")),
             })
         adressen.sort(key=lambda x: x["name"])
         return jsonify({"adressen": adressen, "total": len(adressen)})
