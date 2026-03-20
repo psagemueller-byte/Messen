@@ -5041,6 +5041,11 @@
             // Check if article exists in Supabase, if not create it
             let artRow = artikelList.find(a => a.artikel_nr === artikel.artikel_nr &&
                 (!artikel.version || a.version === artikel.version));
+            // Fallback: match by artikel_nr only — prefer article with Stammdaten
+            if (!artRow) {
+                const candidates = artikelList.filter(a => a.artikel_nr === artikel.artikel_nr);
+                artRow = candidates.find(a => a.messplan_file || a.zeichnung_file) || candidates[0];
+            }
             if (!artRow && sb) {
                 try {
                     const { data, error } = await sb.from("artikel").insert({
@@ -5183,6 +5188,11 @@
                 // Find or create article in Supabase
                 art = artikelList.find(a => a.artikel_nr === searchArtikel.artikel_nr &&
                     (!searchArtikel.version || a.version === searchArtikel.version));
+                // Fallback: match by artikel_nr only — prefer article with Stammdaten
+                if (!art) {
+                    const candidates = artikelList.filter(a => a.artikel_nr === searchArtikel.artikel_nr);
+                    art = candidates.find(a => a.messplan_file || a.zeichnung_file) || candidates[0];
+                }
                 if (!art && sb) {
                     try {
                         const { data, error } = await sb.from("artikel").insert({
@@ -5330,12 +5340,25 @@
         async function weLoadPruefpunkte() {
             if (!sb || !weCurrentArtikelId) return;
             try {
-                const { data, error } = await sb
+                let { data, error } = await sb
                     .from("we_pruefpunkte")
                     .select("*")
                     .eq("artikel_id", weCurrentArtikelId)
                     .order("sort_order");
                 if (error) throw error;
+                // Fallback: if no Prüfpunkte found, try sibling article with same artikel_nr
+                if ((!data || data.length === 0)) {
+                    const currentArt = artikelList.find(a => a.id === weCurrentArtikelId);
+                    if (currentArt) {
+                        const sibling = artikelList.find(a =>
+                            a.artikel_nr === currentArt.artikel_nr && a.id !== currentArt.id);
+                        if (sibling) {
+                            const { data: sibData } = await sb.from("we_pruefpunkte")
+                                .select("*").eq("artikel_id", sibling.id).order("sort_order");
+                            if (sibData && sibData.length > 0) data = sibData;
+                        }
+                    }
+                }
                 wePruefpunkte = (data || []).map(d => ({
                     id: d.id,
                     nr: d.nummer,
